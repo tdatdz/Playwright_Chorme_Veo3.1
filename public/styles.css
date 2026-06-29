@@ -1489,3 +1489,99 @@ select:focus {
   background: rgba(239, 68, 68, 0.15);
   color: #f87171;
 }
+
+/* Smart Progress System */
+
+.job-progress.is-error { background-color: #5a1e2b; color: #ff6b6b; }
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes pulse-light {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+.job-progress.is-running .job-progress-icon { animation: spin-slow 2s linear infinite; }
+.job-progress.is-generating .job-progress-icon { animation: pulse-light 1.5s ease-in-out infinite; }
+
+.job-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 86px;
+  justify-content: center;
+  padding: 5px 9px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid rgba(255,255,255,.12);
+  white-space: nowrap;
+}
+
+.job-progress-icon {
+  line-height: 1;
+}
+
+.job-progress.is-empty {
+  color: #9ca3af;
+  background: rgba(107,114,128,.16);
+  border-color: rgba(156,163,175,.25);
+}
+
+.job-progress.is-queued {
+  color: #facc15;
+  background: rgba(250,204,21,.13);
+  border-color: rgba(250,204,21,.35);
+}
+
+.job-progress.is-running,
+.job-progress.is-uploading,
+.job-progress.is-uploaded,
+.job-progress.is-attaching,
+.job-progress.is-attached,
+.job-progress.is-ready {
+  color: #67e8f9;
+  background: rgba(6,182,212,.14);
+  border-color: rgba(103,232,249,.35);
+}
+
+.job-progress.is-generating {
+  color: #c084fc;
+  background: rgba(168,85,247,.16);
+  border-color: rgba(192,132,252,.4);
+}
+
+.job-progress.is-done {
+  color: #86efac;
+  background: rgba(34,197,94,.16);
+  border-color: rgba(134,239,172,.4);
+}
+
+.job-progress.is-error {
+  color: #fca5a5;
+  background: rgba(239,68,68,.16);
+  border-color: rgba(252,165,165,.45);
+}
+
+/* Row Lock & Stale Progress */
+tr.is-job-locked {
+  opacity: 0.62;
+  filter: saturate(0.75);
+}
+
+tr.is-job-locked input,
+tr.is-job-locked textarea,
+tr.is-job-locked button:not(.copy-prompt-btn) {
+  pointer-events: none;
+}
+
+tr.is-job-locked .copy-prompt-btn {
+  pointer-events: auto;
+}
+
+.job-progress.is-stale {
+  color: #fdba74;
+  background: rgba(251,146,60,.14);
+  border-color: rgba(253,186,116,.38);
+}

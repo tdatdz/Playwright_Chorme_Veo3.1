@@ -12,3 +12,4 @@ artifacts/
 *.html
 diff.txt
 artifacts/
+inject*.cjs

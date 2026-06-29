@@ -353,30 +353,128 @@ async function getComposerAttachmentCount(composer) {
   return await composer.locator('img,video,[data-slate-void="true"], [aria-label*="attachment"], [data-testid*="attachment"]').count();
 }
 
-async function submitJob(
-  page,
-  settings,
-  job,
-  knownTileIds,
-  emit,
-  onJobUpdate,
-  workspaceId
-) {
+function normalizePromptText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+
+
+async function getComposerUserText(textbox) {
+  return await textbox.evaluate((el) => {
+    const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+    const placeholder = el.getAttribute('aria-label') || el.getAttribute('data-placeholder') || el.getAttribute('placeholder') || '';
+    const ignored = [
+      'Bạn muốn tạo gì?', 'Bạn muốn tạo gì', 'Describe what you want to create', 'What do you want to create?', 'Give me',
+      'Tác nhân', 'Agent', 'Thêm thành phần', 'Nano Banana Pro', 'Nano Banana 2', '1x'
+    ];
+    if (!text) return '';
+    if (placeholder && text === placeholder.trim()) return '';
+    if (ignored.some((item) => text.toLowerCase() === item.toLowerCase())) return '';
+    return text;
+  });
+}
+
+async function prepareComposerForNextJob(page, composer, emit, mode) {
+  let count = await getComposerAttachmentCount(composer);
+  if (count > 0) {
+    const removeBtns = composer.locator('button[aria-label*="remove"], button[aria-label*="Delete"], button[aria-label*="Xóa"], button[title*="Xóa"]');
+    for (let i = 0; i < 5; i++) {
+      if (await removeBtns.count() > 0) {
+        await removeBtns.first().click().catch(() => {});
+        await page.waitForTimeout(500);
+      }
+    }
+    const finalCount = await getComposerAttachmentCount(composer);
+    if (finalCount > 0) {
+      throw new Error(`Không clear được ${finalCount} attachment cũ trong composer (mode: ${mode})`);
+    }
+  }
+}
+
+function collectJobReferences(job) {
+  if (!Array.isArray(job.references)) return [];
+  const refs = [];
+  for (let i = 0; i < job.references.length; i++) {
+    const referenceUrl = job.references[i];
+    if (referenceUrl) {
+      // referenceFilePath is already imported in the file at the top
+      const filePath = referenceFilePath(referenceUrl);
+      if (filePath) {
+        refs.push({ slotIndex: i, referenceUrl, filePath });
+      }
+    }
+  }
+  return refs;
+}
+
+async function snapshotMediaPickerItems(dialog) {
+  const locators = dialog.locator('img, video, [role="button"]:has(img), [role="button"]:has(video), div[role="gridcell"]');
+  const count = await locators.count();
+  const items = [];
+  for (let i = 0; i < count; i++) {
+    const box = await locators.nth(i).boundingBox();
+    if (box) items.push({ index: i, box });
+  }
+  return { count, items };
+}
+
+async function findNewUploadedPickerItem(dialog, beforeSnapshot) {
+  const current = await snapshotMediaPickerItems(dialog);
+  if (current.count > beforeSnapshot.count) {
+    if (current.count > beforeSnapshot.count + 1) {
+       throw new Error(`Nhiều hơn 1 item xuất hiện sau upload (${beforeSnapshot.count} -> ${current.count}), không thể an toàn chọn.`);
+    }
+    return dialog.locator('img, video, [role="button"]:has(img), [role="button"]:has(video), div[role="gridcell"]').first();
+  }
+  return null;
+}
+
+async function waitForReferenceUploadReady(page, dialog, beforeSnapshot, emit) {
+  const deadline = Date.now() + 60_000;
+  let newTile = null;
+  while (Date.now() < deadline) {
+    newTile = await findNewUploadedPickerItem(dialog, beforeSnapshot);
+    if (newTile) break;
+    await page.waitForTimeout(500);
+  }
+  if (!newTile) {
+    throw new Error('Hết thời gian chờ ảnh xuất hiện trong Media Library sau khi upload.');
+  }
+  
+  const spinner = newTile.locator('circle, [role="progressbar"], svg.animate-spin, .loading, .spinner');
+  let ready = false;
+  while (Date.now() < deadline) {
+    if (await spinner.count() === 0) {
+      ready = true;
+      break;
+    }
+    if (!(await spinner.first().isVisible().catch(()=>false))) {
+      ready = true;
+      break;
+    }
+    await page.waitForTimeout(500);
+  }
+  
+  if (!ready) {
+    throw new Error('Hết thời gian chờ ảnh upload xong 100% (spinner không biến mất).');
+  }
+  
+  return newTile;
+}
+
+async function runPromptOnlyJob(page, settings, job, knownTileIds, emit, onJobUpdate) {
   const { textbox, composer } = await composerFor(page);
+  await prepareComposerForNextJob(page, composer, emit, 'prompt-only');
 
   await onJobUpdate(job, { progress: 0, status: 'running' });
 
-  if (Array.isArray(job.references) && job.references.some(Boolean)) {
-    await emit('GUARD', 'Reference input đang tạm tắt; chạy prompt-only để ổn định runner.');
-  }
-
   await observedFill(page, textbox, job.prompt, `prompt ${job.code}`, emit);
 
-  const currentPrompt = (await textbox.innerText()).replace(/\s+/g, ' ').trim();
-  const expectedPrompt = String(job.prompt || '').replace(/\s+/g, ' ').trim();
+  const currentPromptText = normalizePromptText(await getComposerUserText(textbox));
+  const expectedPrompt = normalizePromptText(job.prompt);
 
-  if (!currentPrompt.includes(expectedPrompt.slice(0, 80))) {
-    throw new Error('Prompt verification failed after fill.');
+  if (!currentPromptText.includes(expectedPrompt.slice(0, 80))) {
+    throw new Error(`Prompt verification failed after fill. Expected prompt not found.`);
   }
 
   const generateButton = await visibleUnique(
@@ -388,6 +486,21 @@ async function submitJob(
     throw new Error('Generate button is disabled after prompt fill.');
   }
 
+  await onJobUpdate(job, {
+    status: 'running',
+    progress: 'generating',
+    lastProgressAt: new Date().toISOString(),
+  });
+  await onJobUpdate(job, {
+    status: 'running',
+    progress: 'generating',
+    lastProgressAt: new Date().toISOString(),
+  });
+  await onJobUpdate(job, {
+    status: 'running',
+    progress: 'generating',
+    lastProgressAt: new Date().toISOString(),
+  });
   await observedClick(page, generateButton, 'Generate', emit);
   await emit('SUCCESS', `${job.code} đã gửi lệnh tạo sang Flow.`);
 
@@ -399,6 +512,260 @@ async function submitJob(
   );
 
   return { tileIds: tiles.map((tile) => tile.id) };
+}
+
+
+async function getActiveMediaPickerDialog(page) {
+  const dialogs = page.locator('div[role="dialog"]');
+  const visible = [];
+  const count = await dialogs.count();
+
+  for (let i = 0; i < count; i += 1) {
+    const dialog = dialogs.nth(i);
+    if (await dialog.isVisible().catch(() => false)) {
+      const text = await dialog.innerText().catch(() => '');
+      if (
+        /Tất cả|Hình ảnh|Video|Giọng nói|Nhân vật|Tệp tải lên|Tải nội dung nghe nhìn lên|Upload/i.test(text)
+      ) {
+        visible.push(dialog);
+      }
+    }
+  }
+
+  if (visible.length === 0) {
+    throw new Error('Không tìm thấy media picker dialog đang mở.');
+  }
+
+  let best = visible[0];
+  let bestArea = 0;
+  for (const dialog of visible) {
+    const box = await dialog.boundingBox().catch(() => null);
+    const area = box ? box.width * box.height : 0;
+    if (area > bestArea) {
+      best = dialog;
+      bestArea = area;
+    }
+  }
+
+  return best;
+}
+
+async function openUploadTabIfNeeded(dialog, emit) {
+  const uploadTab = dialog
+    .getByRole('button')
+    .filter({ hasText: /^Tệp tải lên$|^Uploads$/i });
+
+  if (await uploadTab.first().isVisible().catch(() => false)) {
+    await uploadTab.first().click();
+    await emit('ACTION', 'Click tab Tệp tải lên');
+    await dialog.page().waitForTimeout(300);
+  }
+}
+
+async function getUploadFileButton(dialog, emit) {
+  const candidates = [
+    dialog.getByRole('button', { name: /Tải nội dung nghe nhìn lên/i }),
+    dialog.getByRole('button', { name: /Upload media/i }),
+    dialog.getByRole('button', { name: /Upload/i }),
+    dialog.locator('button').filter({ hasText: /Tải nội dung nghe nhìn lên|Upload media|Upload/i }),
+  ];
+
+  const visible = [];
+
+  for (const locator of candidates) {
+    const count = await locator.count().catch(() => 0);
+    for (let i = 0; i < count; i += 1) {
+      const item = locator.nth(i);
+      if (await item.isVisible().catch(() => false)) {
+        visible.push(item);
+      }
+    }
+    if (visible.length > 0) break;
+  }
+
+  if (visible.length === 0) {
+    throw new Error('Không tìm thấy nút upload file trong media picker.');
+  }
+
+  let best = visible[0];
+  let bestY = -Infinity;
+  for (const item of visible) {
+    const box = await item.boundingBox().catch(() => null);
+    if (box && box.y > bestY) {
+      best = item;
+      bestY = box.y;
+    }
+  }
+
+  await emit('OBSERVE', `Upload file button candidates=${visible.length}, selected bottom-most`);
+  return best;
+}
+
+
+async function runReferenceJob(page, settings, job, knownTileIds, emit, onJobUpdate, refs) {
+  const { textbox, composer } = await composerFor(page);
+  await prepareComposerForNextJob(page, composer, emit, 'reference');
+  
+  await onJobUpdate(job, { progress: 0, status: 'running' });
+  await emit('INFO', `collected references count=${refs.length} slots=${refs.map(r => r.slotIndex).join(',')}`);
+
+  for (let i = 0; i < refs.length; i++) {
+    const ref = refs[i];
+    await onJobUpdate(job, { progress: 'uploading_reference' });
+    await emit('INFO', `uploading reference slot=${ref.slotIndex} file=${ref.filePath}`);
+    
+    // Guard popup
+    await page.keyboard.press('Escape').catch(() => {});
+    await page.waitForTimeout(200);
+
+    const addButton = await visibleUnique(
+      composer.locator('button[aria-haspopup="dialog"], button[aria-label*="nghe nhìn"], button[aria-label*="media"]'),
+      'Add reference',
+    );
+    await observedClick(page, addButton, 'mở Reference picker', emit);
+    
+    const dialog = await getActiveMediaPickerDialog(page);
+    await dialog.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+    
+    await openUploadTabIfNeeded(dialog, emit);
+    
+    const beforeSnapshot = await snapshotMediaPickerItems(dialog);
+    const uploadButton = await getUploadFileButton(dialog, emit);
+    
+    await showActionIndicator(page, uploadButton, { action: 'upload', control: 'Upload', previewMs: 450 });
+    try {
+      const chooserPromise = page.waitForEvent('filechooser', { timeout: 8_000 });
+      await uploadButton.click();
+      const chooser = await chooserPromise;
+      await chooser.setFiles(ref.filePath);
+    } finally {
+      await clearActionIndicator(page);
+    }
+    
+    let uploadedTile = await waitForReferenceUploadReady(page, dialog, beforeSnapshot, emit);
+    await onJobUpdate(job, { progress: 'reference_uploaded' });
+    await emit('INFO', `uploaded reference slot=${ref.slotIndex}`);
+    
+    await onJobUpdate(job, { progress: 'attaching_reference' });
+    const beforeCount = await getComposerAttachmentCount(composer);
+    
+    // STEP A: click uploaded tile direct
+    await uploadedTile.click({ timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(500);
+    let afterCount = await getComposerAttachmentCount(composer);
+    if (afterCount === beforeCount + 1) {
+      await emit('INFO', `reference attached slot=${ref.slotIndex} by tile-click-direct count=${afterCount}/${refs.length}`);
+      await page.keyboard.press('Escape').catch(() => {});
+      await onJobUpdate(job, { progress: 'reference_attached' });
+      continue;
+    }
+    
+    // STEP B: Nút Thêm vào câu lệnh
+    const submitButton = dialog.locator('button:has-text("Thêm vào câu lệnh"), button:has-text("Add to prompt")');
+    if (await submitButton.isVisible().catch(() => false)) {
+      await submitButton.click({ timeout: 5000 }).catch(() => {});
+      await page.waitForTimeout(500);
+      afterCount = await getComposerAttachmentCount(composer);
+      if (afterCount === beforeCount + 1) {
+        await emit('INFO', `reference attached slot=${ref.slotIndex} by add-to-prompt count=${afterCount}/${refs.length}`);
+        await page.keyboard.press('Escape').catch(() => {});
+        await onJobUpdate(job, { progress: 'reference_attached' });
+        continue;
+      }
+    }
+    
+    // STEP C: Drag/drop fallback
+    const visibleTile = await findNewUploadedPickerItem(dialog, beforeSnapshot);
+    if (!visibleTile || !(await visibleTile.isVisible().catch(() => false))) {
+       throw new Error(`Không tìm lại được uploaded tile visible để drag slot=${ref.slotIndex}`);
+    }
+    
+    const composerBox = await composer.boundingBox().catch(() => null);
+    const thumbBox = await visibleTile.boundingBox({ timeout: 2000 }).catch(() => null);
+    if (!composerBox || !thumbBox) {
+      throw new Error(`Không lấy được boundingBox của uploaded tile slot=${ref.slotIndex} sau khi UI đã thay đổi`);
+    }
+    
+    await page.mouse.move(thumbBox.x + thumbBox.width / 2, thumbBox.y + thumbBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(composerBox.x + composerBox.width / 2, composerBox.y + composerBox.height / 2, { steps: 5 });
+    await page.mouse.up();
+    
+    await page.waitForTimeout(1000);
+    afterCount = await getComposerAttachmentCount(composer);
+    if (afterCount === beforeCount + 1) {
+      await emit('INFO', `reference attached slot=${ref.slotIndex} by drag-drop count=${afterCount}/${refs.length}`);
+      await page.keyboard.press('Escape').catch(() => {});
+      await onJobUpdate(job, { progress: 'reference_attached' });
+      continue;
+    }
+    
+    throw new Error(`Không attach được reference slot=${ref.slotIndex}. Count ${beforeCount} -> ${afterCount}`);
+  }
+  
+  const finalAttachmentCount = await getComposerAttachmentCount(composer);
+  if (finalAttachmentCount !== refs.length) {
+    throw new Error(`Tổng attachment sau khi đính kèm (${finalAttachmentCount}) không khớp với số file (${refs.length})`);
+  }
+  
+  await onJobUpdate(job, { progress: 'prompt_ready' });
+  await observedFill(page, textbox, job.prompt, `prompt ${job.code}`, emit);
+
+  const currentPromptText = normalizePromptText(await getComposerUserText(textbox));
+  const expectedPrompt = normalizePromptText(job.prompt);
+
+  if (!currentPromptText.includes(expectedPrompt.slice(0, 80))) {
+    throw new Error(`Prompt verification failed after fill. Expected prompt not found. Current: "${currentPromptText.slice(0, 200)}"`);
+  }
+  
+  const verifyCountAgain = await getComposerAttachmentCount(composer);
+  if (verifyCountAgain !== refs.length) {
+    throw new Error(`Mất attachment sau khi điền chữ. Cần ${refs.length} nhưng còn ${verifyCountAgain}.`);
+  }
+  
+  await onJobUpdate(job, { progress: 'generating' });
+  const generateButton = await visibleUnique(
+    composer.locator('button:not([aria-haspopup]):has-text("arrow_forward")'),
+    'Generate',
+  );
+
+  if (!(await generateButton.isEnabled())) {
+    throw new Error('Generate button is disabled after prompt fill.');
+  }
+
+  await onJobUpdate(job, {
+    status: 'running',
+    progress: 'generating',
+    lastProgressAt: new Date().toISOString(),
+  });
+  await observedClick(page, generateButton, 'Generate', emit);
+  await emit('SUCCESS', `${job.code} đã gửi lệnh tạo sang Flow.`);
+
+  const tiles = await waitForNewTiles(
+    page,
+    knownTileIds,
+    expectedOutputCount(settings.count),
+    emit,
+  );
+
+  return { tileIds: tiles.map((tile) => tile.id) };
+}
+
+async function submitJob(
+  page,
+  settings,
+  job,
+  knownTileIds,
+  emit,
+  onJobUpdate,
+  workspaceId
+) {
+  const refs = collectJobReferences(job);
+  if (refs.length === 0) {
+    return await runPromptOnlyJob(page, settings, job, knownTileIds, emit, onJobUpdate);
+  } else {
+    return await runReferenceJob(page, settings, job, knownTileIds, emit, onJobUpdate, refs);
+  }
 }
 
 function contentExtension(contentType, mediaType) {

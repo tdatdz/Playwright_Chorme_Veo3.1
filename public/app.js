@@ -205,12 +205,174 @@ function appendLog(event) {
   }
 }
 
-function statusLabel(job) {
-  if (job.status === 'done') return 'XONG';
-  if (job.status === 'error') return 'LỖI';
-  if (job.status === 'running')
-    return `ĐANG ${Math.max(0, Number(job.progress || 0))}%`;
-  return 'CHỜ';
+/**
+ * Progress display contract:
+ * - backend emits runtime states for active jobs
+ * - frontend derives idle states (`empty`, `queued`) from job content
+ * - if output exists, UI prioritizes `done`
+ * Keep this logic centralized in deriveDisplayProgressState()/progressMeta().
+ */
+
+const runtime = {
+  workspaceOperation: null,
+  activeRunId: null,
+  activeJobIds: new Set(),
+};
+
+function startLocalRunTracking(selectedIds) {
+  runtime.activeJobIds = new Set(selectedIds.map(Number));
+  runtime.workspaceOperation = 'batch-run';
+}
+
+function isRuntimeActiveJob(job) {
+  return runtime.activeJobIds.has(Number(job.id));
+}
+
+function reconcileJobsAfterLoad() {
+  if (!runtime.workspaceOperation) {
+    runtime.activeJobIds.clear();
+  }
+  for (const job of jobs) {
+    refreshJobProgressCell(job);
+  }
+}
+
+function normalizeText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function hasRunnablePrompt(job) {
+  return normalizeText(job?.prompt).length > 0;
+}
+
+function hasJobOutput(job) {
+  return Boolean(
+    job?.result ||
+    (Array.isArray(job?.results) && job.results.some(Boolean)) ||
+    job?.outputUrl ||
+    job?.outputPath ||
+    job?.assetPath ||
+    job?.generatedAt ||
+    job?.completedAt ||
+    (job?.runFolder && String(job?.status || '').toLowerCase() === 'done')
+  );
+}
+
+function isRecentlyActive(job, thresholdMs = 90000) {
+  const ts = job?.lastProgressAt ? Date.parse(job.lastProgressAt) : NaN;
+  if (!Number.isFinite(ts)) return false;
+  return Date.now() - ts < thresholdMs;
+}
+
+function deriveDisplayProgressState(job) {
+  const status = String(job?.status || '').toLowerCase();
+  const progress =
+    typeof job?.progress === 'string'
+      ? job.progress.trim()
+      : job?.progress;
+
+  if (status === 'error' || progress === 'error') return 'error';
+
+  if (hasJobOutput(job) || status === 'done' || progress === 'done') {
+    return 'done';
+  }
+
+  if (isRuntimeActiveJob(job)) {
+    return progress || 'running';
+  }
+
+  const runningLike =
+    status === 'running' ||
+    [
+      'uploading_reference',
+      'reference_uploaded',
+      'attaching_reference',
+      'reference_attached',
+      'prompt_ready',
+      'generating',
+      'running',
+    ].includes(progress);
+
+  if (runningLike) {
+    if (isRecentlyActive(job)) {
+      return progress || 'running';
+    }
+    return hasRunnablePrompt(job) ? 'stale_running' : 'empty';
+  }
+
+  if (!hasRunnablePrompt(job)) return 'empty';
+
+  return 'queued';
+}
+
+function isJobLocked(job) {
+  return runtime.activeJobIds.has(Number(job.id));
+}
+
+function progressMeta(state) {
+  const map = {
+    empty: { label: 'Chưa Có', icon: '○', className: 'is-empty' },
+    queued: { label: 'Chờ', icon: '⏳', className: 'is-queued' },
+    stale_running: { label: 'Kẹt', icon: '⏸', className: 'is-stale' },
+    running: { label: 'Đang Chạy', icon: '↻', className: 'is-running' },
+    uploading_reference: { label: 'Tải Ảnh', icon: '⇪', className: 'is-uploading' },
+    reference_uploaded: { label: 'Ảnh Đã Tải', icon: '🖼', className: 'is-uploaded' },
+    attaching_reference: { label: 'Gắn Ảnh', icon: '📎', className: 'is-attaching' },
+    reference_attached: { label: 'Đã Gắn', icon: '📌', className: 'is-attached' },
+    prompt_ready: { label: 'Sẵn Sàng', icon: '✎', className: 'is-ready' },
+    generating: { label: 'Đang Tạo', icon: '✨', className: 'is-generating' },
+    done: { label: 'Xong', icon: '✔', className: 'is-done' },
+    error: { label: 'Lỗi', icon: '⚠', className: 'is-error' },
+  };
+
+  return map[state] || map.running;
+}
+
+function renderJobProgress(job) {
+  const state = deriveDisplayProgressState(job);
+  const meta = progressMeta(state);
+
+  return `
+    <div class="job-progress ${meta.className}" data-progress-state="${state}">
+      <span class="job-progress-icon" aria-hidden="true">${meta.icon}</span>
+      <span class="job-progress-label">${meta.label}</span>
+    </div>
+  `;
+}
+
+function refreshJobProgressCell(job) {
+  const row = document.querySelector(`[data-job-id="${job.id}"]`);
+  if (!row) return;
+
+  const cell = row.querySelector('.progress-cell') || row.querySelector('[data-cell="progress"]');
+  if (!cell) return;
+
+  const badgeContainer = cell.querySelector('.job-progress');
+  if (!badgeContainer) return;
+
+  const state = deriveDisplayProgressState(job);
+  const meta = progressMeta(state);
+  
+  badgeContainer.className = `job-progress ${meta.className}`;
+  badgeContainer.dataset.progressState = state;
+  badgeContainer.innerHTML = `
+    <span class="job-progress-icon" aria-hidden="true">${meta.icon}</span>
+    <span class="job-progress-label">${meta.label}</span>
+  `;
+}
+
+function updateJobAndRefreshProgress(jobId, patch, options = {}) {
+  const job = jobs.find((item) => Number(item.id) === Number(jobId));
+  if (!job) return;
+
+  Object.assign(job, patch);
+  refreshJobProgressCell(job);
+
+  if (options.refreshRow) {
+    renderJobs();
+  }
+
+  schedulePersist();
 }
 
 function batchPayload() {
@@ -295,7 +457,7 @@ function renderJobs() {
           ? job.result
           : null);
       return `
-        <tr class="${job.selected ? 'selected' : ''}" data-job-id="${job.id}">
+        <tr class="${job.selected ? 'selected' : ''} ${isJobLocked(job) ? 'is-job-locked' : ''}" data-job-id="${job.id}">
           <td class="job-stt">
             <div>${index + 1}</div>
             <input
@@ -329,12 +491,12 @@ function renderJobs() {
             </div>
           </td>
           <td>
-            <textarea class="prompt-box" aria-label="Prompt job ${
+            <textarea class="prompt-box" ${isJobLocked(job) ? 'disabled' : ''} aria-label="Prompt job ${
               index + 1
             }">${escapeHtml(job.prompt)}</textarea>
             <div class="row-tools">
-              <button class="mini-btn amber" data-action="edit-sub">Sửa SUB</button>
-              <button class="mini-btn cyan" data-action="edit-prompt">Sửa Prompt</button>
+              <button class="mini-btn job-run-btn" data-action="run-job" ${isJobLocked(job) ? 'disabled' : ''}>▶ Run</button>
+              <button class="mini-btn cyan copy-prompt-btn" data-action="copy-prompt">📋 Copy Prompt</button>
             </div>
           </td>
           <td>
@@ -361,9 +523,7 @@ function renderJobs() {
             </div>
           </td>
           <td class="progress-cell">
-            <span class="progress-badge ${job.status}">
-              ${statusLabel(job)}
-            </span>
+            ${renderJobProgress(job)}
             <div class="progress-actions">
               <button data-action="retry" title="Chạy lại">↻</button>
               <button data-action="folder" title="Mở thư mục">▣</button>
@@ -637,6 +797,14 @@ async function refreshStatus() {
     elements.operationValue.textContent =
       status.operation ||
       (status.recorder ? `REC: ${status.recorder}` : 'IDLE');
+    const prevOp = runtime.workspaceOperation;
+    runtime.workspaceOperation = status.operation;
+    if (prevOp !== runtime.workspaceOperation) {
+      if (typeof renderJobs === 'function') {
+        reconcileJobsAfterLoad();
+        renderJobs();
+      }
+    }
 
     const previous = elements.recipeSelect.value;
     const recipeNames = status.recipes.map((recipe) => recipe.name);
@@ -750,6 +918,11 @@ elements.batchRows.addEventListener('change', (event) => {
   const job = jobFromElement(event.target);
   if (!job) return;
   if (event.target.matches('.job-check')) {
+    if (isJobLocked(job)) {
+      event.target.checked = !event.target.checked; // revert UI
+      alert('Không thể chọn/bỏ chọn job đang chạy.');
+      return;
+    }
     job.selected = event.target.checked;
     renderJobs();
     schedulePersist();
@@ -761,6 +934,7 @@ elements.batchRows.addEventListener('input', (event) => {
   const job = jobFromElement(event.target);
   if (job) {
     job.prompt = event.target.value;
+    refreshJobProgressCell(job);
     schedulePersist();
   }
 });
@@ -780,6 +954,10 @@ elements.batchRows.addEventListener('click', (event) => {
       action === 'reference'
         ? Number(button.dataset.slot)
         : firstEmpty;
+    if (isJobLocked(job)) {
+      alert('Job đang chạy, không thể thay đổi ảnh.');
+      return;
+    }
     if (action === 'reference' && job.references[slot]) {
       openReferenceModal(job, slot);
       return;
@@ -801,6 +979,44 @@ elements.batchRows.addEventListener('click', (event) => {
         ? job.result
         : null);
     if (resultUrl) openResultModal(job, resultUrl);
+    return;
+  }
+  if (action === 'copy-prompt') {
+    const text = String(job.prompt || '');
+    if (!text.trim()) {
+      alert('Prompt trống');
+      return;
+    }
+    navigator.clipboard.writeText(text).then(() => {
+      localLog('INFO', `Đã copy prompt ${job.code}`);
+    });
+    return;
+  }
+  if (action === 'run-job') {
+    if (isJobLocked(job)) {
+      alert('Job đang chạy, không thể chạy lại.');
+      return;
+    }
+    const text = String(job.prompt || '');
+    if (!text.trim()) {
+      alert('Prompt trống');
+      return;
+    }
+    
+    startLocalRunTracking([job.id]);
+    job.status = 'running';
+    job.progress = 'running';
+    refreshJobProgressCell(job);
+    renderJobs();
+    
+    localLog('INFO', `Đang chạy riêng job ${job.code}...`);
+    request('/api/batch/run', {
+      workspaceId: currentWorkspaceId,
+      name: `Run job ${job.code}`,
+      commit: true,
+      selectedIds: [job.id],
+      forceRepeat: false
+    });
     return;
   }
   if (action === 'retry') {
@@ -1031,8 +1247,19 @@ elements.runBatch.addEventListener('click', async () => {
         localLog('GUARD', 'Người dùng đã hủy Batch Run.');
         return;
       }
+      const runIds = selected.map((job) => job.id);
+      startLocalRunTracking(runIds);
+      runIds.forEach(id => {
+        const j = jobs.find(x => x.id === id);
+        if (j) {
+           j.status = 'running';
+           j.progress = 'running';
+        }
+      });
+      renderJobs();
+      
       await request('/api/batch/run', {
-        selectedIds: selected.map((job) => job.id),
+        selectedIds: runIds,
         commit: true,
         workspaceId: currentWorkspaceId,
       });
@@ -1499,19 +1726,37 @@ events.onmessage = (message) => {
     if (job) {
       Object.assign(job, {
         status: event.data.status,
-        progress: Number(event.data.progress || 0),
+        progress: typeof event.data.progress === 'string' && isNaN(Number(event.data.progress)) 
+                    ? event.data.progress 
+                    : Number(event.data.progress || 0),
         result: event.data.result || job.result || null,
         results: Array.isArray(event.data.results)
           ? event.data.results
           : job.results || [],
         runFolder: event.data.runFolder || job.runFolder || null,
+        lastProgressAt: event.data.lastProgressAt || job.lastProgressAt,
         selected:
           typeof event.data.selected === 'boolean'
             ? event.data.selected
             : job.selected,
       });
       job.hasResult = Boolean(job.result || job.results?.length);
-      renderJobs();
+      
+      if (job.status === 'done' || job.status === 'error' || job.progress === 'done' || job.progress === 'error' || hasJobOutput(job)) {
+        runtime.activeJobIds.delete(Number(job.id));
+      }
+      
+      refreshJobProgressCell(job);
+      
+      const row = document.querySelector(`tr[data-job-id="${CSS.escape(String(job.id))}"]`);
+      if (row) {
+        if (isJobLocked(job)) row.classList.add('is-job-locked');
+        else row.classList.remove('is-job-locked');
+      }
+      
+      if (job.status === 'done' && !document.activeElement?.matches('.prompt-box')) {
+        renderJobs();
+      }
     }
   }
 };

@@ -1,0 +1,410 @@
+{
+  "capturedAt": "2026-06-27T14:52:36.435Z",
+  "pageUrl": "https://labs.google/fx/vi/tools/flow/project/32c22767-e80a-4250-8ef5-a30590303f26",
+  "frames": [
+    {
+      "frameUrl": "https://labs.google/fx/vi/tools/flow/project/32c22767-e80a-4250-8ef5-a30590303f26",
+      "controls": [
+        {
+          "tag": "button",
+          "role": null,
+          "name": "arrow_back Quay lại",
+          "text": "arrow_back Quay lại",
+          "ariaLabel": null,
+          "title": null,
+          "placeholder": null,
+          "testId": null,
+          "disabled": false,
+          "box": {
+            "x": 24,
+            "y": 22,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "tag": "input",
+          "role": null,
+          "name": "Văn bản có thể chỉnh sửa",
+          "text": "",
+          "ariaLabel": "Văn bản có thể chỉnh sửa",
+          "title": null,
+          "placeholder": null,
+          "testId": null,
+          "disabled": false,
+          "box": {
+            "x": 80,
+            "y": 26,
+            "width": 92,
+            "height": 24
+          }
+        },
+        {
+          "tag": "button",
+          "role": null,
+          "name": "more_vert Tuỳ chọn khác",
+          "text": "more_vert Tuỳ chọn khác",
+          "ariaLabel": null,
+          "title": null,
+          "placeholder": null,
+          "testId": null,
+          "disabled": false,
+          "box": {
+            "x": 180,
+            "y": 22,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "tag": "button",
+          "role": null,
+          "name": "search Tìm kiếm",
+          "text": "search Tìm kiếm",
+          "ariaLabel": null,
+          "title": null,
+          "placeholder": null,
+          "testId": null,
+          "disabled": false,
+          "box": {
+            "x": 689,
+            "y": 22,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "tag": "input",
+          "role": null,
+          "name": null,
+          "text": "",
+          "ariaLabel": null,
+          "title": null,
+          "placeholder": null,
+          "testId": "search-input",
+          "disabled": false,
+          "box": {
+            "x": 727,
+            "y": 19,
+            "width": 370,
+            "height": 38
+          }
+        },
+        {
+          "tag": "button",
+          "role": null,
+          "name": "filter_list Sắp xếp và lọc",
+          "text": "filter_list Sắp xếp và lọc",
+          "ariaLabel": null,
+          "title": null,
+          "placeholder": null,
+          "testId": null,
+          "disabled": false,
+          "box": {
+            "x": 1116,
+            "y": 18,
+            "width": 42,
+            "height": 40
+          }
+        },
+        {
+          "tag": "button",
+          "role": null,
+          "name": "add Thêm nội dung nghe nhìn",
+          "text": "add Thêm nội dung nghe nhìn",
+          "ariaLabel": null,
+          "title": null,
+          "placeholder": null,
+          "testId": null,
+          "disabled": false,
+          "box": {
+            "x": 1625,
+            "y": 22,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "tag": "button",
+          "role": null,
+          "name": "help Trợ giúp về sản phẩm",
+          "text": "help Trợ giúp về sản phẩm",
+          "ariaLabel": null,
+          "title": null,
+          "placeholder": null,
+          "testId": null,
+          "disabled": false,
+          "box": {
+            "x": 1669,
+            "y": 22,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "tag": "button",
+          "role": null,
+          "name": "settings_2 Cài đặt chế độ xem",
+          "text": "settings_2 Cài đặt chế độ xem",
+          "ariaLabel": null,
+          "title": null,
+          "placeholder": null,
+          "testId": null,
+          "disabled": false,
+          "box": {
+            "x": 1713,
+            "y": 22,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "tag": "button",
+          "role": null,
+          "name": "more_vert Khác",
+          "text": "more_vert Khác",
+          "ariaLabel": null,
+          "title": null,
+          "placeholder": null,
+          "testId": null,
+          "disabled": false,
+          "box": {
+            "x": 1757,
+            "y": 22,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "tag": "button",
+          "role": null,
+          "name": "PRO",
+          "text": "PRO",
+          "ariaLabel": null,
+          "title": null,
+          "placeholder": null,
+          "testId": null,
+          "disabled": false,
+          "box": {
+            "x": 1801,
+            "y": 14,
+            "width": 99,
+            "height": 48
+          }
+        },
+        {
+          "tag": "button",
+          "role": null,
+          "name": "dashboard Tất cả nội dung nghe nhìn",
+          "text": "dashboard Tất cả nội dung nghe nhìn",
+          "ariaLabel": null,
+          "title": null,
+          "placeholder": null,
+          "testId": null,
+          "disabled": false,
+          "box": {
+            "x": 20,
+            "y": 80,
+            "width": 40,
+            "height": 40
+          }
+        },
+        {
+          "tag": "button",
+          "role": null,
+          "name": "accessibility_new Nhân vật",
+          "text": "accessibility_new Nhân vật",
+          "ariaLabel": null,
+          "title": null,
+          "placeholder": null,
+          "testId": null,
+          "disabled": false,
+          "box": {
+            "x": 20,
+            "y": 133,
+            "width": 40,
+            "height": 40
+          }
+        },
+        {
+          "tag": "button",
+          "role": null,
+          "name": "movie Xem các cảnh",
+          "text": "movie Xem các cảnh",
+          "ariaLabel": null,
+          "title": null,
+          "placeholder": null,
+          "testId": null,
+          "disabled": false,
+          "box": {
+            "x": 20,
+            "y": 186,
+            "width": 40,
+            "height": 40
+          }
+        },
+        {
+          "tag": "button",
+          "role": null,
+          "name": "apps_spark_2 Công cụ",
+          "text": "apps_spark_2 Công cụ",
+          "ariaLabel": null,
+          "title": null,
+          "placeholder": null,
+          "testId": null,
+          "disabled": false,
+          "box": {
+            "x": 20,
+            "y": 260,
+            "width": 40,
+            "height": 40
+          }
+        },
+        {
+          "tag": "button",
+          "role": null,
+          "name": "delete Xem thùng rác",
+          "text": "delete Xem thùng rác",
+          "ariaLabel": null,
+          "title": null,
+          "placeholder": null,
+          "testId": null,
+          "disabled": false,
+          "box": {
+            "x": 20,
+            "y": 768,
+            "width": 40,
+            "height": 40
+          }
+        },
+        {
+          "tag": "button",
+          "role": null,
+          "name": "left_panel_close Thu gọn",
+          "text": "left_panel_close Thu gọn",
+          "ariaLabel": null,
+          "title": null,
+          "placeholder": null,
+          "testId": null,
+          "disabled": false,
+          "box": {
+            "x": 20,
+            "y": 821,
+            "width": 40,
+            "height": 40
+          }
+        },
+        {
+          "tag": "div",
+          "role": null,
+          "name": "Bắt đầu tạo hoặc thả nội dung nghe nhìn",
+          "text": "Bắt đầu tạo hoặc thả nội dung nghe nhìn",
+          "ariaLabel": null,
+          "title": null,
+          "placeholder": null,
+          "testId": "virtuoso-scroller",
+          "disabled": false,
+          "box": {
+            "x": 228,
+            "y": 0,
+            "width": 1692,
+            "height": 945
+          }
+        },
+        {
+          "tag": "div",
+          "role": "textbox",
+          "name": "Bạn muốn tạo gì?",
+          "text": "Bạn muốn tạo gì?",
+          "ariaLabel": null,
+          "title": null,
+          "placeholder": null,
+          "testId": null,
+          "disabled": false,
+          "box": {
+            "x": 670,
+            "y": 835,
+            "width": 566,
+            "height": 20
+          }
+        },
+        {
+          "tag": "button",
+          "role": null,
+          "name": "add_2 Tạo",
+          "text": "add_2 Tạo",
+          "ariaLabel": null,
+          "title": null,
+          "placeholder": null,
+          "testId": null,
+          "disabled": false,
+          "box": {
+            "x": 670,
+            "y": 872,
+            "width": 32,
+            "height": 32
+          }
+        },
+        {
+          "tag": "button",
+          "role": null,
+          "name": "Tác nhân",
+          "text": "Tác nhân",
+          "ariaLabel": null,
+          "title": null,
+          "placeholder": null,
+          "testId": null,
+          "disabled": false,
+          "box": {
+            "x": 707,
+            "y": 872,
+            "width": 83,
+            "height": 32
+          }
+        },
+        {
+          "tag": "button",
+          "role": null,
+          "name": "🍌 Nano Banana Pro crop_16_9 1x",
+          "text": "🍌 Nano Banana Pro crop_16_9 1x",
+          "ariaLabel": null,
+          "title": null,
+          "placeholder": null,
+          "testId": null,
+          "disabled": false,
+          "box": {
+            "x": 1049,
+            "y": 871,
+            "width": 166,
+            "height": 34
+          }
+        },
+        {
+          "tag": "button",
+          "role": null,
+          "name": "arrow_forward Tạo",
+          "text": "arrow_forward Tạo",
+          "ariaLabel": null,
+          "title": null,
+          "placeholder": null,
+          "testId": null,
+          "disabled": true,
+          "box": {
+            "x": 1220,
+            "y": 872,
+            "width": 32,
+            "height": 32
+          }
+        }
+      ]
+    },
+    {
+      "frameUrl": "about:blank",
+      "controls": []
+    },
+    {
+      "frameUrl": "",
+      "controls": []
+    }
+  ]
+}

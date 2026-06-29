@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "id": "single-start-frame-to-video",
+  "urlIncludes": "labs.google/fx/vi/tools/flow",
+  "startRoute": "project",
+  "variables": {
+    "startFrame": "D:/replace/with/your-keyframe.png",
+    "prompt": "Slow cinematic push-in, natural motion, preserve the subject and composition."
+  },
+  "steps": [
+    {
+      "control": "flow.mode.video",
+      "trainingLabel": "tab Video ở bảng tạo nội dung",
+      "action": "click"
+    },
+    {
+      "control": "flow.video.frames_to_video",
+      "trainingLabel": "chế độ Frames to Video / Khung hình thành video",
+      "action": "click"
+    },
+    {
+      "control": "flow.video.start_frame",
+      "trainingLabel": "ô tải ảnh khung hình đầu tiên",
+      "action": "upload",
+      "risk": "upload",
+      "value": "${startFrame}"
+    },
+    {
+      "control": "flow.prompt",
+      "trainingLabel": "ô nhập câu lệnh prompt",
+      "action": "fill",
+      "value": "${prompt}"
+    },
+    {
+      "control": "flow.generate",
+      "trainingLabel": "nút mũi tên Generate / Tạo",
+      "action": "click",
+      "risk": "side_effect"
+    }
+  ]
+}

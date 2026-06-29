@@ -1,0 +1,15 @@
+[
+  {
+    "domain": "labs.google",
+    "expirationDate": 1893456000,
+    "hostOnly": true,
+    "httpOnly": true,
+    "name": "COOKIE_NAME",
+    "path": "/",
+    "sameSite": "lax",
+    "secure": true,
+    "session": false,
+    "storeId": null,
+    "value": "PASTE_COOKIE_VALUE_HERE"
+  }
+]

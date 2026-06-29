@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "app": "google-flow",
+  "updatedAt": "2026-06-27T08:41:39.227Z",
+  "controls": {
+    "flow.mode.video": {
+      "key": "flow.mode.video",
+      "pageUrl": "https://labs.google/fx/vi/tools/flow/project/b8a5aea5-9e18-4ec2-b29f-43708780c2d7",
+      "frameUrl": "https://labs.google/fx/vi/tools/flow/project/b8a5aea5-9e18-4ec2-b29f-43708780c2d7",
+      "fingerprint": {
+        "tag": "button",
+        "role": "button",
+        "name": "🍌 Nano Banana 2 crop_16_9 x2",
+        "text": "🍌 Nano Banana 2 crop_16_9 x2",
+        "ariaLabel": null,
+        "title": null,
+        "placeholder": null,
+        "testId": null,
+        "inputType": "button",
+        "css": "#radix-\\:r55\\:"
+      },
+      "visualAnchor": {
+        "x": 0.5923055013020834,
+        "y": 0.9396825396825397,
+        "viewport": {
+          "width": 1920,
+          "height": 945
+        }
+      },
+      "capturedAt": "2026-06-27T08:41:23.637Z"
+    },
+    "flow.video.frames_to_video": {
+      "key": "flow.video.frames_to_video",
+      "pageUrl": "https://labs.google/fx/vi/tools/flow/project/b8a5aea5-9e18-4ec2-b29f-43708780c2d7",
+      "frameUrl": "https://labs.google/fx/vi/tools/flow/project/b8a5aea5-9e18-4ec2-b29f-43708780c2d7",
+      "fingerprint": {
+        "tag": "button",
+        "role": "tab",
+        "name": "1x",
+        "text": "1x",
+        "ariaLabel": null,
+        "title": null,
+        "placeholder": null,
+        "testId": null,
+        "inputType": "button",
+        "css": "#radix-\\:r5u\\:-trigger-1"
+      },
+      "visualAnchor": {
+        "x": 0.5125,
+        "y": 0.7906746031746031,
+        "viewport": {
+          "width": 1920,
+          "height": 945
+        }
+      },
+      "capturedAt": "2026-06-27T08:41:28.666Z"
+    },
+    "flow.video.start_frame": {
+      "key": "flow.video.start_frame",
+      "pageUrl": "https://labs.google/fx/vi/tools/flow/project/b8a5aea5-9e18-4ec2-b29f-43708780c2d7",
+      "frameUrl": "https://labs.google/fx/vi/tools/flow/project/b8a5aea5-9e18-4ec2-b29f-43708780c2d7",
+      "fingerprint": {
+        "tag": "button",
+        "role": "button",
+        "name": "🍌 Nano Banana Pro",
+        "text": "🍌 Nano Banana Pro",
+        "ariaLabel": null,
+        "title": null,
+        "placeholder": null,
+        "testId": null,
+        "inputType": null,
+        "css": "div:nth-of-type(4) > div > div:nth-of-type(1) > div > button"
+      },
+      "visualAnchor": {
+        "x": 0.5619791666666667,
+        "y": 0.8772486772486773,
+        "viewport": {
+          "width": 1920,
+          "height": 945
+        }
+      },
+      "capturedAt": "2026-06-27T08:41:32.187Z"
+    },
+    "flow.prompt": {
+      "key": "flow.prompt",
+      "pageUrl": "https://labs.google/fx/vi/tools/flow/project/b8a5aea5-9e18-4ec2-b29f-43708780c2d7",
+      "frameUrl": "https://labs.google/fx/vi/tools/flow/project/b8a5aea5-9e18-4ec2-b29f-43708780c2d7",
+      "fingerprint": {
+        "tag": "button",
+        "role": "button",
+        "name": "🍌 Nano Banana 2",
+        "text": "🍌 Nano Banana 2",
+        "ariaLabel": null,
+        "title": null,
+        "placeholder": null,
+        "testId": null,
+        "inputType": null,
+        "css": "div:nth-of-type(4) > div > div:nth-of-type(2) > div > button"
+      },
+      "visualAnchor": {
+        "x": 0.5619791666666667,
+        "y": 0.9174603174603174,
+        "viewport": {
+          "width": 1920,
+          "height": 945
+        }
+      },
+      "capturedAt": "2026-06-27T08:41:33.683Z"
+    },
+    "flow.generate": {
+      "key": "flow.generate",
+      "pageUrl": "https://labs.google/fx/vi/tools/flow/project/b8a5aea5-9e18-4ec2-b29f-43708780c2d7",
+      "frameUrl": "https://labs.google/fx/vi/tools/flow/project/b8a5aea5-9e18-4ec2-b29f-43708780c2d7",
+      "fingerprint": {
+        "tag": "button",
+        "role": "tab",
+        "name": "crop_free Khung hình",
+        "text": "crop_free Khung hình",
+        "ariaLabel": null,
+        "title": null,
+        "placeholder": null,
+        "testId": null,
+        "inputType": "button",
+        "css": "#radix-\\:r67\\:-trigger-VIDEO_FRAMES"
+      },
+      "visualAnchor": {
+        "x": 0.5296875,
+        "y": 0.68994708994709,
+        "viewport": {
+          "width": 1920,
+          "height": 945
+        }
+      },
+      "capturedAt": "2026-06-27T08:41:39.225Z"
+    }
+  }
+}

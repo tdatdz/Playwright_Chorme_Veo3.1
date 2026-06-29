@@ -1,0 +1,27 @@
+{
+  "name": "flow-keyframe-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Teach-once Playwright bot for Google Flow, attached to a dedicated Chrome profile.",
+  "scripts": {
+    "app": "node src/app-server.js",
+    "chrome:start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-chrome.ps1",
+    "check": "node --check src/app-server.js && node --check src/auth.js && node --check src/batch-store.js && node --check src/chrome.js && node --check src/flow-batch-executor.js && node --check src/flow-project.js && node --check src/output-store.js && node --check src/script-director.js && node --check src/script-studio-store.js && node --check src/indicator.js && node --check src/recorder.js && node --check src/registry.js && node --check src/safety.js && node --check src/scanner.js && node --check src/trainer.js && node --check src/executor.js && node --check src/cli.js && node --check public/app.js",
+    "auth": "node src/cli.js auth",
+    "doctor": "node src/cli.js doctor",
+    "record": "node src/cli.js record",
+    "replay": "node src/cli.js replay",
+    "scan": "node src/cli.js scan",
+    "train": "node src/cli.js train",
+    "train:reset": "node src/cli.js reset-registry",
+    "train:keyframe": "node src/cli.js train examples/keyframe.image-to-video.json",
+    "run:keyframe": "node src/cli.js run examples/keyframe.image-to-video.json"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "playwright-core": "1.61.1"
+  }
+}

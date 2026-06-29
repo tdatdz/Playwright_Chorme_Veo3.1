@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "app": "google-flow",
+  "updatedAt": "2026-06-27T09:40:47.920Z",
+  "controls": {
+    "recorded.button.add_2_du_an_moi.421fb11d": {
+      "key": "recorded.button.add_2_du_an_moi.421fb11d",
+      "pageUrl": "https://labs.google/fx/vi/tools/flow",
+      "frameUrl": "https://labs.google/fx/vi/tools/flow",
+      "fingerprint": {
+        "tag": "button",
+        "role": "button",
+        "name": "add_2 Dự án mới",
+        "text": "add_2 Dự án mới",
+        "ariaLabel": null,
+        "title": null,
+        "placeholder": null,
+        "testId": null,
+        "inputType": null,
+        "css": "div:nth-of-type(1) > div:nth-of-type(2) > div > div > button"
+      },
+      "visualAnchor": {
+        "x": 0.5,
+        "y": 0.8604143947655398,
+        "viewport": {
+          "width": 929,
+          "height": 917
+        }
+      },
+      "capturedAt": "2026-06-27T09:36:15.609Z",
+      "recorded": true
+    },
+    "recorded.button.nano_banana_pro_crop_16_9_1x.7e3c244b": {
+      "key": "recorded.button.nano_banana_pro_crop_16_9_1x.7e3c244b",
+      "pageUrl": "https://labs.google/fx/vi/tools/flow/project/dcb3f9c2-924c-45dc-a25d-a61da0bee694",
+      "frameUrl": "https://labs.google/fx/vi/tools/flow/project/dcb3f9c2-924c-45dc-a25d-a61da0bee694",
+      "fingerprint": {
+        "tag": "button",
+        "role": "button",
+        "name": "🍌 Nano Banana Pro crop_16_9 1x",
+        "text": "🍌 Nano Banana Pro crop_16_9 1x",
+        "ariaLabel": null,
+        "title": null,
+        "placeholder": null,
+        "testId": null,
+        "inputType": "button",
+        "css": "#radix-\\:r36\\:"
+      },
+      "visualAnchor": {
+        "x": 0.6852966899892358,
+        "y": 0.9378407851690295,
+        "viewport": {
+          "width": 929,
+          "height": 917
+        }
+      },
+      "capturedAt": "2026-06-27T09:36:21.182Z",
+      "recorded": true
+    },
+    "recorded.div.bat_dau_tao_hoac_tha_noi_dung_nghe_n.17271547": {
+      "key": "recorded.div.bat_dau_tao_hoac_tha_noi_dung_nghe_n.17271547",
+      "pageUrl": "https://labs.google/fx/vi/tools/flow/project/dcb3f9c2-924c-45dc-a25d-a61da0bee694",
+      "frameUrl": "https://labs.google/fx/vi/tools/flow/project/dcb3f9c2-924c-45dc-a25d-a61da0bee694",
+      "fingerprint": {
+        "tag": "div",
+        "role": null,
+        "name": "Bắt đầu tạo hoặc thả nội dung nghe nhìn",
+        "text": "Bắt đầu tạo hoặc thả nội dung nghe nhìn",
+        "ariaLabel": null,
+        "title": null,
+        "placeholder": null,
+        "testId": "virtuoso-scroller",
+        "inputType": null,
+        "css": "div[data-testid=\"virtuoso-scroller\"]"
+      },
+      "visualAnchor": {
+        "x": 0.6227125941872982,
+        "y": 0.5,
+        "viewport": {
+          "width": 929,
+          "height": 917
+        }
+      },
+      "capturedAt": "2026-06-27T09:40:47.919Z",
+      "recorded": true
+    }
+  }
+}

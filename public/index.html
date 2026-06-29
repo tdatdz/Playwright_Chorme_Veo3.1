@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flow Batch Studio</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="scanlines" aria-hidden="true"></div>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">PLAYWRIGHT CONTROL DECK</p>
+        <h1>FLOW BATCH STUDIO <span>v0.2</span></h1>
+        <span style="color: rgb(159, 238, 185); font-size: 12px;">Nguyễn Thành Đạt - Dsut</span>
+      </div>
+      <nav class="top-tabs" aria-label="Khu vực làm việc">
+        <button class="top-tab active" data-view="timeline">
+          Điều tốc Timeline
+        </button>
+        <button class="top-tab" data-view="script">
+          Chuẩn hóa kịch bản
+        </button>
+        <button class="top-tab" data-view="strategy">
+          Chiến lược batch
+        </button>
+      </nav>
+      <div class="status-row">
+        <span id="chromeStatus" class="chip offline">CHROME OFF</span>
+        <span id="flowStatus" class="chip offline">FLOW CLOSED</span>
+        <span id="guardStatus" class="chip guard">SAFE MODE</span>
+      </div>
+    </header>
+
+    <main class="layout batch-layout">
+      <aside class="sidebar">
+        <section class="panel">
+          <div class="panel-title">
+            <span>01</span>
+            <h2>Kết nối Flow</h2>
+          </div>
+          <button id="startChrome" class="btn primary">Mở Chrome Flow</button>
+          <button id="authCookie" class="btn">Nạp cookie đăng nhập</button>
+          <dl class="metrics">
+            <div><dt>CDP</dt><dd id="cdpValue">—</dd></div>
+            <div><dt>Controls</dt><dd id="registryValue">0</dd></div>
+            <div><dt>Tabs</dt><dd id="tabsValue">0</dd></div>
+          </dl>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <span>02</span>
+            <h2>Action Recorder</h2>
+          </div>
+          <label for="recipeName">Tên recipe thao tác</label>
+          <input
+            id="recipeName"
+            autocomplete="off"
+            placeholder="tao-video-keyframe"
+            value="tao-video-keyframe"
+          />
+          <div class="button-grid">
+            <button id="recordStart" class="btn record">● Bắt đầu ghi</button>
+            <button id="recordStop" class="btn stop">■ Dừng & lưu</button>
+          </div>
+          <p class="hint">
+            Ghi locator và action từ Flow. Đây là recipe điều khiển nền cho
+            batch runner.
+          </p>
+        </section>
+
+        <section class="panel automation-panel">
+          <div class="panel-title">
+            <span>03</span>
+            <h2>Automation</h2>
+            <strong id="operationValue">IDLE</strong>
+          </div>
+          <label for="recipeSelect">Recipe điều khiển</label>
+          <select id="recipeSelect">
+            <option value="">Chưa có recipe</option>
+          </select>
+          <label class="toggle">
+            <input id="forceRepeat" type="checkbox" />
+            <span></span>
+            Force repeat
+          </label>
+          <div class="button-grid">
+            <button id="replaySafe" class="btn">Safe check</button>
+            <button id="replayCommit" class="btn commit">Commit</button>
+          </div>
+          <button id="resetRegistry" class="btn danger">Reset registry</button>
+        </section>
+      </aside>
+
+      <section
+        id="timelineView"
+        class="workspace batch-workspace view"
+        data-view-panel="timeline"
+      >
+        <div class="workspace-tabs-strip">
+          <div id="workspaceTabs" class="workspace-tabs" role="tablist"></div>
+          <button id="newWorkspace" class="workspace-add" title="Tạo workspace mới">+</button>
+        </div>
+        <div class="flow-session-strip">
+          <span class="session-strip-label">FLOW PROJECTS</span>
+          <div id="flowSessions" class="flow-sessions" role="tablist"></div>
+          <button
+            id="newFlowSession"
+            class="session-add"
+            title="Tạo tab và project Flow mới"
+          >
+            +
+          </button>
+        </div>
+        <section class="panel batch-panel">
+          <div class="batch-heading">
+            <div class="panel-title">
+              <span>04</span>
+              <h2>Batch Creation Timeline</h2>
+            </div>
+            <div class="batch-summary">
+              <span><b id="selectedJobs">0</b> selected</span>
+              <span><b id="totalJobs">0</b> jobs</span>
+              <button id="addRow" class="btn tiny">+ Thêm hàng</button>
+            </div>
+          </div>
+
+          <div class="batch-table-wrap">
+            <table class="batch-table">
+              <colgroup>
+                <col class="col-stt" />
+                <col class="col-no" />
+                <col class="col-ref" />
+                <col class="col-prompt" />
+                <col class="col-result" />
+                <col class="col-progress" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>STT</th>
+                  <th>No.</th>
+                  <th>Reference</th>
+                  <th>Prompt</th>
+                  <th>Result</th>
+                  <th>Progress</th>
+                </tr>
+              </thead>
+              <tbody id="batchRows"></tbody>
+            </table>
+          </div>
+
+          <div class="batch-toolbar">
+            <button id="selectAll" class="tool-btn active">☑ ALL</button>
+            <button id="testBatch" class="tool-btn">◉ Test Flow</button>
+            <button id="runBatch" class="tool-btn run">▶ Run</button>
+            <button id="runErrors" class="tool-btn warn">⚠ Run Errors</button>
+            <select id="generationMode" aria-label="Chế độ tạo">
+              <option value="Image">Image</option>
+              <option value="Video">Video</option>
+            </select>
+            <select id="inputTypeSelect" aria-label="Loại đầu vào Video">
+              <option value="Khung hình">Khung hình</option>
+              <option value="Thành phần">Thành phần</option>
+            </select>
+            <select id="modelSelect" aria-label="Model tạo">
+              <option>Nano Banana Pro</option>
+            </select>
+            <select id="durationSelect" aria-label="Thời lượng Video">
+              <option value="4s">4s</option>
+              <option value="6s">6s</option>
+              <option value="8s">8s</option>
+              <option value="10s">10s</option>
+            </select>
+            <select id="aspectSelect" aria-label="Tỷ lệ">
+              <option>16:9</option>
+              <option>9:16</option>
+              <option>1:1</option>
+              <option>4:3</option>
+              <option>3:4</option>
+            </select>
+            <select id="countSelect" aria-label="Số lượng">
+              <option>1x</option>
+              <option>x2</option>
+              <option>x3</option>
+              <option>x4</option>
+            </select>
+            <select id="delaySelect" aria-label="Delay gửi">
+              <option value="1500">Delay 1.5s</option>
+              <option value="2500" selected>Delay 2.5s</option>
+              <option value="4000">Delay 4s</option>
+              <option value="6000">Delay 6s</option>
+            </select>
+            <button id="exportSrt" class="tool-btn">Xuất SRT</button>
+            <button id="exportPrompts" class="tool-btn">Xuất Prompts</button>
+            <button id="deleteRows" class="tool-btn danger">Delete</button>
+            <button id="clearRows" class="tool-btn danger">Xóa hết</button>
+          </div>
+        </section>
+
+        <section class="panel observer batch-observer">
+          <div class="panel-title observer-title">
+            <div>
+              <span>05</span>
+              <h2>Observer Log</h2>
+            </div>
+            <div class="observer-actions">
+              <span class="observer-live">● LIVE</span>
+              <button id="clearLogs" class="icon-btn">CLEAR</button>
+            </div>
+          </div>
+          <div id="logs" class="terminal" role="log" aria-live="polite"></div>
+        </section>
+      </section>
+
+      <section
+        id="scriptView"
+        class="workspace script-workspace view"
+        data-view-panel="script"
+        hidden
+      >
+        <div class="script-studio-scroll">
+          <section class="panel director-connect">
+            <div class="panel-title">
+              <span>AI</span>
+              <h2>Cấu hình AI Master</h2>
+              <strong id="directorProviderStatus">LOCAL READY</strong>
+            </div>
+            <div class="director-connect-row">
+              <select id="directorProvider" aria-label="AI Master provider">
+                <option value="local">
+                  Local Director — bản nháp schema
+                </option>
+                <option value="manual-ai-studio">
+                  Google AI Studio — copy/paste JSON
+                </option>
+              </select>
+              <button id="openAiStudio" class="btn">
+                Mở Google AI Studio
+              </button>
+              <span>
+                Local compiler dựng timeline/schema nhưng không thay thế khả
+                năng dịch và suy luận của LLM; AI Studio dùng luồng copy/paste
+                có kiểm chứng JSON.
+              </span>
+            </div>
+          </section>
+
+          <section class="panel dna-step">
+            <div class="panel-title">
+              <span>01</span>
+              <h2>Thiết lập DNA phong cách thị giác chủ đạo</h2>
+            </div>
+            <div class="dna-grid">
+              <div>
+                <label for="styleAnalyzer">Prompt phân tích tối đa 6 ảnh</label>
+                <textarea id="styleAnalyzer" class="studio-textarea analyzer"></textarea>
+                <div class="studio-actions">
+                  <label class="btn file-trigger" for="styleReferences">
+                    Chọn tối đa 6 ảnh
+                  </label>
+                  <input
+                    id="styleReferences"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    multiple
+                    hidden
+                  />
+                  <button id="copyStyleAnalyzer" class="btn">
+                    Copy prompt phân tích
+                  </button>
+                  <span id="styleReferenceCount" class="file-count">
+                    Chưa chọn ảnh
+                  </span>
+                </div>
+              </div>
+              <div>
+                <label for="styleDna">Visual DNA đã chốt</label>
+                <textarea
+                  id="styleDna"
+                  class="studio-textarea dna-output"
+                  placeholder="Dán one-line visual style prompt tiếng Anh..."
+                ></textarea>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel director-step">
+            <div class="panel-title">
+              <span>02</span>
+              <h2>AI đạo diễn và băm kịch bản thành scene</h2>
+            </div>
+            <div class="director-grid">
+              <div class="director-inputs">
+                <div class="director-two-cols">
+                  <div>
+                    <label for="filmType">Loại phim</label>
+                    <select id="filmType">
+                      <option>Cinematic story</option>
+                      <option>Explainer</option>
+                      <option>Documentary</option>
+                      <option>Folklore / Mystery</option>
+                      <option>Commercial</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="scriptLanguage">Ngôn ngữ kịch bản</label>
+                    <select id="scriptLanguage">
+                      <option>Tiếng Việt</option>
+                      <option>English</option>
+                    </select>
+                  </div>
+                </div>
+
+                <label for="characterAnalyzer">Prompt phân tích DNA nhân vật</label>
+                <textarea
+                  id="characterAnalyzer"
+                  class="studio-textarea analyzer compact"
+                ></textarea>
+                <div class="studio-actions">
+                  <label class="btn file-trigger" for="characterReference">
+                    Chọn ảnh nhân vật
+                  </label>
+                  <input
+                    id="characterReference"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    hidden
+                  />
+                  <button id="copyCharacterAnalyzer" class="btn">
+                    Copy prompt DNA
+                  </button>
+                  <span id="characterReferenceName" class="file-count">
+                    Chưa chọn ảnh
+                  </span>
+                </div>
+
+                <label for="characterDna">Character DNA đã chốt</label>
+                <textarea
+                  id="characterDna"
+                  class="studio-textarea dna-output compact"
+                  placeholder="Ngoại hình, trang phục, silhouette và continuity..."
+                ></textarea>
+
+                <div class="director-modes">
+                  <label>
+                    <input id="preserveScript" type="checkbox" checked />
+                    Giữ nguyên 100% câu chữ kịch bản gốc
+                  </label>
+                  <label>
+                    <input id="storyMode" type="checkbox" />
+                    Chế độ kể chuyện / tâm linh
+                  </label>
+                  <label>
+                    <input id="allowText" type="checkbox" />
+                    Cho phép chữ xuất hiện trong ảnh
+                  </label>
+                </div>
+
+                <div class="director-two-cols">
+                  <div>
+                    <label for="targetSceneSeconds">
+                      Thời lượng mục tiêu mỗi scene
+                    </label>
+                    <input
+                      id="targetSceneSeconds"
+                      type="number"
+                      min="4"
+                      max="30"
+                      value="10"
+                    />
+                  </div>
+                  <div class="scene-schema-note">
+                    Output: scene · srt · duration · timestamp · prompts ·
+                    v2_prompts
+                  </div>
+                </div>
+
+                <label for="storyInput">Kịch bản / câu chuyện</label>
+                <textarea
+                  id="storyInput"
+                  class="studio-textarea story-input"
+                  placeholder="Nhập toàn bộ kịch bản, câu chuyện hoặc ý tưởng..."
+                ></textarea>
+              </div>
+
+              <div class="master-output">
+                <div class="master-output-heading">
+                  <label for="masterJson">Master Prompt JSON chuẩn đạo diễn</label>
+                  <span id="masterStats">0 scene</span>
+                </div>
+                <textarea
+                  id="masterJson"
+                  class="studio-textarea master-json"
+                  spellcheck="false"
+                  placeholder='{"schemaVersion":1,"project":{},"scenes":[]}'
+                ></textarea>
+              </div>
+            </div>
+
+            <div class="director-footer">
+              <button id="compileDirector" class="btn commit">
+                ⚡ Kích hoạt đạo diễn AI băm kịch bản
+              </button>
+              <button id="copyDirectorInstruction" class="btn">
+                Copy master-instruction cho AI Studio
+              </button>
+              <button id="copyMasterJson" class="btn">
+                Copy Master JSON
+              </button>
+              <button id="runMasterFlow" class="btn primary">
+                ▶ Kích hoạt chạy AI Studio FLOW
+              </button>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section
+        id="strategyView"
+        class="workspace strategy-workspace view"
+        data-view-panel="strategy"
+        hidden
+      >
+        <section class="panel">
+          <div class="panel-title">
+            <span>03</span>
+            <h2>Chiến lược batch</h2>
+          </div>
+          <p class="hint">
+            Khu vực chiến lược sẽ dùng Master JSON và lịch sử các Flow session
+            để lập kế hoạch retry, quota và ưu tiên scene.
+          </p>
+        </section>
+      </section>
+    </main>
+
+    <input
+      id="referenceFile"
+      type="file"
+      accept="image/png,image/jpeg,image/webp"
+      hidden
+    />
+    <div id="imageModal" class="image-modal" hidden>
+      <button id="closeImageModal" class="modal-close" aria-label="Đóng ảnh">
+        ×
+      </button>
+      <div class="image-modal-card">
+        <img id="modalImage" alt="Reference preview" />
+        <div class="image-modal-meta">
+          <span id="modalImageLabel">Reference</span>
+          <button id="replaceReference" class="btn">Đổi ảnh</button>
+          <button id="deleteReference" class="btn danger">✕ Xóa ảnh</button>
+        </div>
+      </div>
+    </div>
+    <div id="tabContextMenu" class="context-menu" hidden>
+      <button id="menuRenameTab">Đổi tên</button>
+      <button id="menuDeleteTab" class="danger">Xóa tab</button>
+    </div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

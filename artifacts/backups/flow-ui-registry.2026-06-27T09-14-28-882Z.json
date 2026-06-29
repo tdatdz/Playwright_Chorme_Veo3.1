@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "app": "google-flow",
+  "updatedAt": "2026-06-27T09:14:13.469Z",
+  "controls": {
+    "recorded.button.generate.c5b908a4": {
+      "key": "recorded.button.generate.c5b908a4",
+      "pageUrl": "https://labs.google/fx/vi/tools/flow/project/b8a5aea5-9e18-4ec2-b29f-43708780c2d7",
+      "frameUrl": "https://labs.google/fx/vi/tools/flow/project/b8a5aea5-9e18-4ec2-b29f-43708780c2d7",
+      "fingerprint": {
+        "tag": "button",
+        "role": "button",
+        "name": "Generate",
+        "text": "Generate",
+        "ariaLabel": "Generate",
+        "title": null,
+        "placeholder": null,
+        "testId": null,
+        "inputType": null,
+        "css": "#__risk-smoke"
+      },
+      "visualAnchor": {
+        "x": 0.0175537109375,
+        "y": 1.0126984126984127,
+        "viewport": {
+          "width": 1920,
+          "height": 945
+        }
+      },
+      "capturedAt": "2026-06-27T09:14:13.469Z",
+      "recorded": true
+    }
+  }
+}

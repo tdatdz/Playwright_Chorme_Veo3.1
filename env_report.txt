@@ -1,0 +1,5 @@
+11.12.1
+v24.15.0
+Need to install the following packages:
+playwright@1.61.1
+Ok to proceed? (y) 

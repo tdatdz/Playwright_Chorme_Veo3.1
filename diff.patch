@@ -1,0 +1,346 @@
+diff --git a/backup.js b/current.js
+index 43994a0..f6f6a3e 100644
+--- a/backup.js
++++ b/current.js
+@@ -54,17 +54,8 @@ async function visibleUnique(locator, label, { timeoutMs = 0 } = {}) {
+ }
+ 
+ async function composerFor(page) {
+-  const textbox = await visibleUnique(
+-    page.locator('[role="textbox"][contenteditable="true"]'),
+-    'Flow prompt',
+-    { timeoutMs: 30_000 },
+-  );
+-  const composer = textbox.locator(
+-    'xpath=ancestor::div[.//button[@aria-haspopup="menu"]][1]',
+-  );
+-  if ((await composer.count()) !== 1) {
+-    throw new Error('Flow prompt composer was not found.');
+-  }
++  const textbox = page.getByRole('textbox').first();
++  const composer = textbox.locator('..').locator('..');
+   return { textbox, composer };
+ }
+ 
+@@ -194,13 +185,16 @@ async function configureFlow(page, settings, emit) {
+ 
+   const modeText = settings.mode === 'Image' ? 'Hình ảnh' : 'Video';
+   await chooseTab(page, modeText, `mode ${settings.mode}`, emit);
+-  await chooseTab(page, settings.aspect, `tỷ lệ ${settings.aspect}`, emit);
+-  await chooseTab(
+-    page,
+-    countLabel(settings.count),
+-    `số lượng ${settings.count}`,
+-    emit,
+-  );
++
++  if (settings.mode === 'Video') {
++    if (settings.inputType) await chooseTab(page, settings.inputType, `loại ${settings.inputType}`, emit);
++    if (settings.aspect) await chooseTab(page, settings.aspect, `tỷ lệ ${settings.aspect}`, emit);
++    if (settings.count) await chooseTab(page, countLabel(settings.count), `số lượng ${settings.count}`, emit);
++    if (settings.duration) await chooseTab(page, settings.duration, `thời lượng ${settings.duration}`, emit);
++  } else {
++    if (settings.aspect) await chooseTab(page, settings.aspect, `tỷ lệ ${settings.aspect}`, emit);
++    if (settings.count) await chooseTab(page, countLabel(settings.count), `số lượng ${settings.count}`, emit);
++  }
+ 
+   const modelDropdown = await visibleUnique(
+     page
+@@ -236,42 +230,57 @@ async function configureFlow(page, settings, emit) {
+     );
+   }
+   const summary = await configButton.innerText();
+-  const expectedCount = settings.count;
+-  if (
+-    !summary.includes(settings.model) ||
+-    !summary.includes(ASPECT_ICON[settings.aspect]) ||
+-    !summary.includes(expectedCount)
+-  ) {
++  
++  let isValid = summary.includes(settings.model);
++  if (settings.aspect) {
++     const icon = ASPECT_ICON[settings.aspect];
++     if (icon && !summary.includes(icon) && !summary.includes(settings.aspect)) isValid = false;
++  }
++  
++  if (settings.mode === 'Video' && settings.duration) {
++     if (!summary.includes(settings.duration)) isValid = false;
++  }
++  
++  if (!isValid) {
+     throw new Error(
+-      `Flow settings verification failed. Current summary: "${summary}"`,
++      `Flow settings verification failed. Expected: ${settings.mode} / ${settings.model} / ${settings.aspect} / ${settings.count} / ${settings.duration || ''}. Current summary chip: "${summary}"`
+     );
+   }
+   await emit(
+     'SUCCESS',
+-    `Đã xác minh ${settings.mode} · ${settings.model} · ${settings.aspect} · ${settings.count}`,
++    `Đã xác minh ${settings.mode} · ${settings.model} · ${settings.aspect} · ${settings.count}` + (settings.duration ? ` · ${settings.duration}` : ''),
+   );
+ }
+ 
+-async function attachReference(page, referenceUrl, emit) {
+-  if (!referenceUrl) return;
++async function getPromptAttachments(page) {
++  const { textbox } = await composerFor(page);
++  const container = textbox.locator('..').locator('..').locator('..');
++  return container.locator('button:has(i:text-is("cancel"))');
++}
++
++async function attachReference(page, ref, index, total, currentAttachmentCount, emit, updateState) {
++  const referenceUrl = ref.filePath;
++  if (!referenceUrl) return currentAttachmentCount;
+   const filePath = referenceFilePath(referenceUrl);
+   if (!filePath) throw new Error('Reference path is invalid.');
+   const { composer } = await composerFor(page);
+-  const before = await composer
+-    .locator('img,video,[data-slate-void="true"]')
+-    .count();
+   const addButton = await visibleUnique(
+     composer.locator('button[aria-haspopup="dialog"]'),
+     'Add reference',
+   );
+   await observedClick(page, addButton, 'mở Reference picker', emit);
++
+   const uploadButton = await visibleUnique(
+-    page
+-      .getByRole('button')
+-      .filter({ hasText: 'Tải nội dung nghe nhìn lên' }),
+-    'Upload reference',
++    page.getByRole('button').filter({ hasText: 'Tải nội dung nghe nhìn lên' }),
++    'Tải nội dung nghe nhìn lên',
+   );
++
+   const observation = await observeBeforeAction(uploadButton);
++  await updateState('uploading_reference', `uploading_reference: tải ảnh ${index + 1}/${total} (${ref.fileName})`);
++  await emit('ACTION', `Bắt đầu upload reference: ${filePath}`);
++  const chooserPromise = page.waitForEvent('filechooser', {
++    timeout: 30_000,
++  });
+   await emit('OBSERVE', 'UI ổn định tại Upload reference.', {
+     mutations: observation.mutationCount,
+   });
+@@ -292,18 +301,24 @@ async function attachReference(page, referenceUrl, emit) {
+   } finally {
+     await clearActionIndicator(page);
+   }
+-  await page.waitForTimeout(900);
+ 
+-  const after = await composer
+-    .locator('img,video,[data-slate-void="true"]')
+-    .count();
+-  if (after <= before) {
+-    await page.keyboard.press('Escape').catch(() => {});
+-    throw new Error(
+-      'Reference was uploaded but Flow did not confirm attachment in the prompt.',
+-    );
++  const deadline = Date.now() + 45_000;
++  let after = currentAttachmentCount;
++  let attached = false;
++  
++  while (Date.now() < deadline) {
++    after = await getPromptAttachments(page).count();
++    if (after > currentAttachmentCount) {
++      attached = true;
++      break;
++    }
++    await page.waitForTimeout(1000);
++  }
++
++  if (!attached) {
++    throw new Error('Reference was uploaded but Flow did not confirm attachment in the prompt.');
+   }
+-  await emit('SUCCESS', 'Reference đã xuất hiện trong prompt composer.');
++  return after;
+ }
+ 
+ class SubmittedButUntrackedError extends Error {
+@@ -351,36 +366,61 @@ async function waitForNewTiles(
+ 
+ async function submitJob(
+   page,
+-  settings,
+-  job,
++  runtimePayload,
+   knownTileIds,
+   emit,
++  updateState,
+ ) {
++  await updateState('preparing', `preparing job with ${runtimePayload.references.length} references: ${runtimePayload.references.map(r => r.fileName).join(', ')}`);
++  
+   const initialComposer = await composerFor(page);
+-  const staleAttachments = await initialComposer.composer
+-    .locator('img,video,[data-slate-void="true"]')
+-    .count();
+-  const reference = job.references.find(Boolean);
+-  if (staleAttachments > 0) {
+-    throw new Error(
+-      `${job.code}: composer còn ${staleAttachments} reference từ lần trước. Runner chặn để không dùng nhầm ảnh.`,
+-    );
++  
++  const staleAttachments = await getPromptAttachments(page);
++  const staleCount = await staleAttachments.count();
++  if (staleCount > 0) {
++    try {
++      for (let i = 0; i < staleCount; i++) {
++        const cancelBtn = staleAttachments.nth(0).locator('i:text-is("cancel")');
++        if (await cancelBtn.isVisible()) {
++           await cancelBtn.click();
++           await page.waitForTimeout(500);
++        }
++      }
++    } catch(e) {}
++    
++    const staleAfter = await getPromptAttachments(page).count();
++    if (staleAfter > 0) {
++      throw new Error(
++        `Composer vẫn còn ${staleAfter} reference cũ từ job trước. Không thể xóa tự động.`
++      );
++    }
++  }
++
++  let currentAttachmentCount = 0;
++  const total = runtimePayload.references.length;
++  for (let i = 0; i < total; i++) {
++    const ref = runtimePayload.references[i];
++    currentAttachmentCount = await attachReference(page, ref, i, total, currentAttachmentCount, emit, updateState);
++  }
++  
++  if (total > 0) {
++    await emit('SUCCESS', `all references attached`);
+   }
+-  if (reference) await attachReference(page, reference, emit);
+ 
++  await updateState('prompt_ready', 'Điền prompt text');
+   const { textbox, composer } = await composerFor(page);
+   await observedFill(
+     page,
+     textbox,
+-    job.prompt,
+-    `prompt ${job.code}`,
++    runtimePayload.prompt,
++    `prompt job-${runtimePayload.jobId}`,
+     emit,
+   );
+   const currentPrompt = (await textbox.innerText()).trim();
+-  if (!currentPrompt.includes(job.prompt.slice(0, 80))) {
++  if (!currentPrompt.includes(runtimePayload.prompt.slice(0, 80))) {
+     throw new Error('Prompt verification failed after fill.');
+   }
+-  await emit('SUCCESS', `Đã điền và xác minh prompt ${job.code}.`);
++  await emit('SUCCESS', `Đã điền và xác minh prompt.`);
+ 
+   const generateButton = await visibleUnique(
+     composer.locator(
+@@ -391,12 +431,13 @@ async function submitJob(
+   if (!(await generateButton.isEnabled())) {
+     throw new Error('Generate button is disabled after prompt fill.');
+   }
++  await updateState('generating', `Đã gửi lệnh tạo sang Flow.`);
+   await observedClick(page, generateButton, 'Generate', emit);
+-  await emit('SUCCESS', `${job.code} đã gửi lệnh tạo sang Flow.`);
++  
+   const tiles = await waitForNewTiles(
+     page,
+     knownTileIds,
+-    expectedOutputCount(settings.count),
++    expectedOutputCount(runtimePayload.config.count),
+     emit,
+   );
+   return { tileIds: tiles.map((tile) => tile.id) };
+@@ -596,6 +637,7 @@ async function monitorSubmittedJobs({
+ export async function runFlowBatch({
+   page,
+   batch,
++  workspaceId,
+   selectedIds,
+   dryRun = false,
+   onEvent = () => {},
+@@ -603,19 +645,8 @@ export async function runFlowBatch({
+ }) {
+   const selected = batch.jobs.filter((job) => selectedIds.has(job.id));
+   if (selected.length === 0) throw new Error('No batch jobs selected.');
+-  if (batch.settings.mode !== 'Image') {
+-    throw new Error(
+-      'Direct adapter currently supports Image mode only. Video requires a separate verified state machine.',
+-    );
+-  }
+-  if (
+-    !['Nano Banana Pro', 'Nano Banana 2'].includes(
+-      batch.settings.model,
+-    )
+-  ) {
+-    throw new Error(
+-      `Model "${batch.settings.model}" is not available in Image mode.`,
+-    );
++  if (batch.settings.mode !== 'Image' && batch.settings.mode !== 'Video') {
++    throw new Error('Unsupported mode: ' + batch.settings.mode);
+   }
+   if (!dryRun) {
+     const unsafeJobs = selected.filter((job) =>
+@@ -633,7 +664,7 @@ export async function runFlowBatch({
+   const emitFor = (job) => async (level, message, data = {}) => {
+     await onEvent({
+       level,
+-      message: `[${job.code}] ${message}`,
++      message: `[${workspaceId}/${job.id}] ${message}`,
+       jobId: job.id,
+       ...data,
+     });
+@@ -698,17 +729,40 @@ export async function runFlowBatch({
+       });
+       const manifest = manifestJob(run, job.id);
+       manifest.status = 'submitting';
+-      await saveRunManifest(run);
+-      await emit(
+-        'INFO',
+-        'Bắt đầu gửi job; các job đã gửi sẽ render song song trong cùng project.',
+-      );
++      const emit = emitFor(job);
++      const updateState = async (stateString, message) => {
++        await onJobUpdate(job, { status: stateString });
++        if (message) await emit('INFO', message);
++      };
++
++      const runtimeReferences = (job.references || [])
++        .map((ref, index) => {
++          if (!ref) return null;
++          return {
++            slotIndex: index,
++            filePath: ref,
++            fileName: ref.split('/').pop()
++          };
++        })
++        .filter(Boolean)
++        .sort((a, b) => a.slotIndex - b.slotIndex);
++
++      const runtimePayload = {
++        workspaceId,
++        jobId: job.id,
++        prompt: job.prompt,
++        references: runtimeReferences,
++        config: batch.settings
++      };
++
++      await emit('INFO', `Runtime payload: ${runtimeReferences.length} references: ${runtimeReferences.map(r => r.fileName).join(', ')}`);
++
+       const { tileIds } = await submitJob(
+         page,
+-        batch.settings,
+-        job,
++        runtimePayload,
+         knownTileIds,
+         emit,
++        updateState,
+       );
+       tileIds.forEach((tileId) => knownTileIds.add(tileId));
+       manifest.tileIds = tileIds;
+@@ -738,6 +792,7 @@ export async function runFlowBatch({
+       await onJobUpdate(job, {
+         status: 'error',
+         progress: 0,
++        result: error.message,
+         runFolder: run.name,
+       });
+       manifest.status = 'error';

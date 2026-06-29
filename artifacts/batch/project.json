@@ -1,0 +1,129 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-06-28T09:23:58.514Z",
+  "settings": {
+    "mode": "Image",
+    "model": "Nano Banana Pro",
+    "aspect": "16:9",
+    "count": "1x",
+    "submitDelayMs": 2500
+  },
+  "jobs": [
+    {
+      "id": 1,
+      "code": "S1.1",
+      "selected": false,
+      "prompt": "A cinematic establishing shot of a futuristic coastal city at blue hour, glowing architecture, natural atmospheric depth, premium editorial composition.",
+      "references": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "result": "/output-assets/28.06.2026_16.23/S1.1_01.jpg",
+      "results": [
+        "/output-assets/28.06.2026_16.23/S1.1_01.jpg"
+      ],
+      "progress": 100,
+      "runFolder": "28.06.2026_16.23",
+      "status": "done"
+    },
+    {
+      "id": 2,
+      "code": "S1.2",
+      "selected": false,
+      "prompt": "Close portrait of the main character under soft window light, realistic skin texture, confident expression, shallow depth of field, clean background.",
+      "references": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "result": "/output-assets/28.06.2026_16.23/S1.2_01.jpg",
+      "results": [
+        "/output-assets/28.06.2026_16.23/S1.2_01.jpg"
+      ],
+      "progress": 100,
+      "runFolder": "28.06.2026_16.23",
+      "status": "done"
+    },
+    {
+      "id": 3,
+      "code": "S1.3",
+      "selected": false,
+      "prompt": "A dynamic street scene in light rain, reflections across dark pavement, subtle motion blur, dramatic practical lighting, coherent character design.",
+      "references": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "result": "/output-assets/28.06.2026_16.23/S1.3_01.jpg",
+      "results": [
+        "/output-assets/28.06.2026_16.23/S1.3_01.jpg"
+      ],
+      "progress": 100,
+      "runFolder": "28.06.2026_16.23",
+      "status": "done"
+    },
+    {
+      "id": 4,
+      "code": "S2.1",
+      "selected": false,
+      "prompt": "Wide aerial view above layered mountain valleys at sunrise, volumetric clouds, warm rim light, highly detailed but natural color grading.",
+      "references": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "result": "/output-assets/28.06.2026_16.23/S2.1_01.jpg",
+      "results": [
+        "/output-assets/28.06.2026_16.23/S2.1_01.jpg"
+      ],
+      "progress": 100,
+      "runFolder": "28.06.2026_16.23",
+      "status": "done"
+    },
+    {
+      "id": 5,
+      "code": "S2.2",
+      "selected": false,
+      "prompt": "Minimal product composition on a sculpted stone pedestal, soft cyan and amber lighting, precise shadows, luxury advertising photography.",
+      "references": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "result": null,
+      "results": [],
+      "progress": 0,
+      "runFolder": null,
+      "status": "error"
+    },
+    {
+      "id": 6,
+      "code": "S2.3",
+      "selected": false,
+      "prompt": "An intimate interior scene with the character reading beside a large window, quiet mood, warm practical lights, cinematic framing.",
+      "references": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "result": null,
+      "results": [],
+      "progress": 0,
+      "runFolder": null,
+      "status": "waiting"
+    }
+  ]
+}

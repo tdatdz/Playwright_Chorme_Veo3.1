@@ -1,0 +1,344 @@
+diff --git a/app-backup.js b/app-current.js
+index 4adcc55..632bbb8 100644
+--- a/app-backup.js
++++ b/app-current.js
+@@ -20,6 +20,8 @@ const elements = {
+   replayCommit: document.querySelector('#replayCommit'),
+   resetRegistry: document.querySelector('#resetRegistry'),
+   clearLogs: document.querySelector('#clearLogs'),
++  workspaceTabs: document.querySelector('#workspaceTabs'),
++  newWorkspace: document.querySelector('#newWorkspace'),
+   batchRows: document.querySelector('#batchRows'),
+   selectedJobs: document.querySelector('#selectedJobs'),
+   totalJobs: document.querySelector('#totalJobs'),
+@@ -33,6 +35,8 @@ const elements = {
+   aspectSelect: document.querySelector('#aspectSelect'),
+   countSelect: document.querySelector('#countSelect'),
+   delaySelect: document.querySelector('#delaySelect'),
++  inputTypeSelect: document.querySelector('#inputTypeSelect'),
++  durationSelect: document.querySelector('#durationSelect'),
+   exportSrt: document.querySelector('#exportSrt'),
+   exportPrompts: document.querySelector('#exportPrompts'),
+   deleteRows: document.querySelector('#deleteRows'),
+@@ -105,6 +109,41 @@ let modalReference = null;
+ let persistTimer = null;
+ let studioPersistTimer = null;
+ 
++let currentWorkspaceId = localStorage.getItem('currentWorkspaceId') || null;
++let workspaces = [];
++
++async function loadWorkspaces() {
++  try {
++    const response = await fetch('/api/batch/workspaces', { cache: 'no-store' });
++    if (!response.ok) return;
++    const result = await response.json();
++    workspaces = result.workspaces || [];
++    
++    if (workspaces.length > 0) {
++      if (!currentWorkspaceId || !workspaces.find((w) => w.id === currentWorkspaceId)) {
++        currentWorkspaceId = workspaces[0].id;
++        localStorage.setItem('currentWorkspaceId', currentWorkspaceId);
++      }
++    }
++    renderWorkspaceTabs();
++  } catch (error) {
++    localLog('ERROR', `Lỗi tải workspaces: ${error.message}`);
++  }
++}
++
++function renderWorkspaceTabs() {
++  if (!elements.workspaceTabs) return;
++  elements.workspaceTabs.innerHTML = workspaces
++    .map(
++      (w) => `
++    <button class="workspace-tab ${w.id === currentWorkspaceId ? 'active' : ''}" data-workspace-id="${escapeHtml(w.id)}" title="Click đúp để đổi tên">
++      <span>${escapeHtml(w.title)}</span>
++    </button>
++  `
++    )
++    .join('');
++}
++
+ function appendLog(event) {
+   const line = document.createElement('div');
+   line.className = `log-line level-${event.level}`;
+@@ -126,17 +165,30 @@ function appendLog(event) {
+ function statusLabel(job) {
+   if (job.status === 'done') return 'XONG';
+   if (job.status === 'error') return 'LỖI';
+-  if (job.status === 'running') {
++  if (job.status === 'running' || job.status === 'generating') {
+     return `ĐANG ${Math.max(0, Number(job.progress || 0))}%`;
+   }
+-  return 'CHỜ';
++  if (job.status === 'waiting' || job.status === 'pending') return 'CHỜ';
++  
++  const labels = {
++    preparing: 'CHUẨN BỊ',
++    clearing_previous_attachments: 'DỌN DẸP',
++    uploading_reference: 'ĐANG UP ẢNH',
++    waiting_reference_ready: 'CHỜ ẢNH',
++    attaching_reference: 'GẮN ẢNH',
++    reference_attached: 'ĐÃ GẮN ẢNH',
++    prompt_ready: 'GÕ PROMPT',
++  };
++  return labels[job.status] || job.status.toUpperCase();
+ }
+ 
+ function batchPayload() {
+   return {
+     settings: {
+       mode: elements.generationMode.value,
++      inputType: elements.inputTypeSelect.value,
+       model: elements.modelSelect.value,
++      duration: elements.durationSelect.value,
+       aspect: elements.aspectSelect.value,
+       count: elements.countSelect.value,
+       submitDelayMs: Number(elements.delaySelect.value),
+@@ -156,21 +208,26 @@ function batchPayload() {
+   };
+ }
+ 
+-async function saveBatchState() {
+-  await request('/api/batch/save', batchPayload());
++async function saveActiveBatch() {
++  const payload = {
++    batch: batchPayload(),
++    workspaceId: currentWorkspaceId,
++  };
++  await request('/api/batch/save', payload);
+ }
+ 
+ function schedulePersist() {
+   window.clearTimeout(persistTimer);
+   persistTimer = window.setTimeout(() => {
+-    void saveBatchState().catch((error) => {
++    void saveActiveBatch().catch((error) => {
+       localLog('ERROR', `Không lưu được batch: ${error.message}`);
+     });
+   }, 280);
+ }
+ 
+ async function loadBatchState() {
+-  const response = await fetch('/api/batch', { cache: 'no-store' });
++  const query = currentWorkspaceId ? `?workspaceId=${currentWorkspaceId}` : '';
++  const response = await fetch(`/api/batch${query}`, { cache: 'no-store' });
+   if (!response.ok) throw new Error('Không tải được batch project.');
+   const batch = await response.json();
+   jobs = batch.jobs.map((job) => ({
+@@ -183,12 +240,19 @@ async function loadBatchState() {
+     hasResult: Boolean(job.result || job.results?.length),
+   }));
+   elements.generationMode.value = batch.settings.mode;
++  elements.inputTypeSelect.value = batch.settings.inputType || 'Khung hình';
+   elements.modelSelect.value = batch.settings.model;
++  elements.durationSelect.value = batch.settings.duration || '6s';
+   elements.aspectSelect.value = batch.settings.aspect;
+   elements.countSelect.value = batch.settings.count;
+   elements.delaySelect.value = String(
+     batch.settings.submitDelayMs || 2500,
+   );
++  updateConfigUI();
++  // We need to set them again after updateConfigUI to ensure they stick if they are valid
++  if (batch.settings.inputType) elements.inputTypeSelect.value = batch.settings.inputType;
++  if (batch.settings.model) elements.modelSelect.value = batch.settings.model;
++  if (batch.settings.duration) elements.durationSelect.value = batch.settings.duration;
+ }
+ 
+ function renderJobs() {
+@@ -709,6 +773,66 @@ elements.batchRows.addEventListener('click', (event) => {
+   }
+ });
+ 
++if (elements.newWorkspace) {
++  elements.newWorkspace.addEventListener('click', async () => {
++    try {
++      const result = await request('/api/batch/workspaces/new', {
++        title: `Workspace ${workspaces.length + 1}`,
++      });
++      if (result.ok && result.workspace) {
++        currentWorkspaceId = result.workspace.id;
++        localStorage.setItem('currentWorkspaceId', currentWorkspaceId);
++        await loadWorkspaces();
++        await loadBatchState();
++        renderJobs();
++      }
++    } catch (error) {
++      localLog('ERROR', `Không tạo được workspace mới: ${error.message}`);
++    }
++  });
++}
++
++if (elements.workspaceTabs) {
++  elements.workspaceTabs.addEventListener('click', async (event) => {
++    const tab = event.target.closest('.workspace-tab');
++    if (!tab) return;
++    const id = tab.dataset.workspaceId;
++    if (id && id !== currentWorkspaceId) {
++      currentWorkspaceId = id;
++      localStorage.setItem('currentWorkspaceId', currentWorkspaceId);
++      renderWorkspaceTabs();
++      await loadBatchState();
++      renderJobs();
++    }
++  });
++
++  elements.workspaceTabs.addEventListener('dblclick', async (event) => {
++    const tab = event.target.closest('.workspace-tab');
++    if (!tab) return;
++    const id = tab.dataset.workspaceId;
++    const workspace = workspaces.find((w) => w.id === id);
++    if (!workspace) return;
++    const newTitle = window.prompt('Đổi tên tab:', workspace.title);
++    if (newTitle && newTitle.trim() !== workspace.title) {
++      try {
++        const response = await fetch(`/api/batch/workspaces/${id}`, {
++          method: 'PATCH',
++          headers: {
++            'Content-Type': 'application/json',
++            'X-Flow-Observer': '1',
++          },
++          body: JSON.stringify({ title: newTitle.trim() }),
++        });
++        if (response.ok) {
++          await loadWorkspaces();
++        }
++      } catch (error) {
++        localLog('ERROR', `Lỗi đổi tên tab: ${error.message}`);
++      }
++    }
++  });
++}
++
+ elements.addRow.addEventListener('click', () => {
+   const id = Math.max(0, ...jobs.map((job) => job.id)) + 1;
+   jobs.push({
+@@ -748,6 +872,7 @@ elements.runBatch.addEventListener('click', async () => {
+     const result = await request('/api/batch/validate', {
+       selectedIds: selected.map((job) => job.id),
+       commit: true,
++      workspaceId: currentWorkspaceId,
+     });
+     if (result.ready) {
+       const summary = `${result.selected} job · ${elements.generationMode.value} · ${elements.modelSelect.value} · ${elements.aspectSelect.value} · ${elements.countSelect.value} · delay ${Number(elements.delaySelect.value) / 1000}s`;
+@@ -762,6 +887,7 @@ elements.runBatch.addEventListener('click', async () => {
+       await request('/api/batch/run', {
+         selectedIds: selected.map((job) => job.id),
+         commit: true,
++        workspaceId: currentWorkspaceId,
+       });
+       await loadBatchState();
+       renderJobs();
+@@ -782,11 +908,13 @@ elements.testBatch.addEventListener('click', async () => {
+     const validation = await request('/api/batch/validate', {
+       selectedIds: selected.map((job) => job.id),
+       commit: false,
++      workspaceId: currentWorkspaceId,
+     });
+     if (!validation.ready) return;
+     await request('/api/batch/run', {
+       selectedIds: selected.map((job) => job.id),
+       commit: false,
++      workspaceId: currentWorkspaceId,
+     });
+   } finally {
+     elements.testBatch.disabled = false;
+@@ -803,19 +931,64 @@ elements.runErrors.addEventListener('click', () => {
+   localLog('INFO', `[UI] Đã chọn ${errors.length} job lỗi để chạy lại.`);
+ });
+ 
++const FLOW_CONFIG = {
++  Image: {
++    models: ["Nano Banana Pro"],
++    ratios: ["16:9", "4:3", "1:1", "3:4", "9:16"],
++    counts: ["1x", "x2", "x3", "x4"]
++  },
++  Video: {
++    models: ["Omni Flash", "Veo 3.1 - Lite", "Veo 3.1 - Fast", "Veo 3.1 - Quality"],
++    ratios: ["9:16", "16:9"],
++    counts: ["1x", "x2", "x3", "x4"],
++    durations: ["4s", "6s", "8s", "10s"],
++    inputTypes: ["Khung hình", "Thành phần"]
++  }
++};
++
++function updateConfigUI() {
++  const mode = elements.generationMode.value;
++  const config = FLOW_CONFIG[mode] || FLOW_CONFIG.Image;
++  
++  // Model Select
++  const currentModel = elements.modelSelect.value;
++  elements.modelSelect.innerHTML = config.models.map(m => `<option value="${m}">${m}</option>`).join('');
++  if (config.models.includes(currentModel)) {
++    elements.modelSelect.value = currentModel;
++  } else {
++    elements.modelSelect.value = config.models[0];
++  }
++
++  if (mode === 'Video') {
++    elements.inputTypeSelect.style.display = 'inline-block';
++    elements.durationSelect.style.display = 'inline-block';
++  } else {
++    elements.inputTypeSelect.style.display = 'none';
++    elements.durationSelect.style.display = 'none';
++  }
++}
++
+ for (const select of [
+   elements.generationMode,
++  elements.inputTypeSelect,
+   elements.modelSelect,
++  elements.durationSelect,
+   elements.aspectSelect,
+   elements.countSelect,
+   elements.delaySelect,
+ ]) {
+   select.addEventListener('change', () => {
++    if (select === elements.generationMode) {
++       updateConfigUI();
++    }
+     localLog('INFO', `[UI] ${select.getAttribute('aria-label')}: ${select.value}`);
+     schedulePersist();
+   });
+ }
+ 
++// Initial UI config
++updateConfigUI();
++
+ elements.exportPrompts.addEventListener('click', () => {
+   const rows = selectedBatchJobs().length ? selectedBatchJobs() : jobs;
+   downloadText(
+@@ -1153,14 +1326,22 @@ elements.runMasterFlow.addEventListener('click', async () => {
+ const events = new EventSource('/events');
+ events.onmessage = (message) => {
+   const event = JSON.parse(message.data);
+-  appendLog(event);
+-  if (event.data?.refreshBatch) {
++  const isCurrentWorkspace = !event.data?.workspaceId || event.data.workspaceId === currentWorkspaceId;
++  
++  if (isCurrentWorkspace) {
++    appendLog(event);
++  }
++  
++  if (event.data?.refreshWorkspaces) {
++    void loadWorkspaces().catch(() => {});
++  }
++  if (event.data?.refreshBatch && isCurrentWorkspace) {
+     void loadBatchState().then(renderJobs).catch(() => {});
+   }
+   if (event.data?.refreshSessions) {
+     void loadFlowSessions().catch(() => {});
+   }
+-  if (event.data?.jobId && event.data?.status) {
++  if (event.data?.jobId && event.data?.status && isCurrentWorkspace) {
+     const job = jobs.find(
+       (candidate) => candidate.id === Number(event.data.jobId),
+     );
+@@ -1188,6 +1369,7 @@ events.onerror = () =>
+ 
+ localLog('INFO', 'Dashboard đã sẵn sàng. Đang đồng bộ trạng thái...');
+ try {
++  await loadWorkspaces();
+   await loadBatchState();
+   localLog('SUCCESS', `Đã tải batch project với ${jobs.length} job.`);
+ } catch (error) {

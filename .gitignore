@@ -1,0 +1,11 @@
+node_modules/
+.chrome-profile/
+.chrome-profiles/
+config/cookies.json
+artifacts/failures/
+artifacts/journals/
+OutPut/
+*.log
+.env
+.DS_Storeartifacts/
+*.html

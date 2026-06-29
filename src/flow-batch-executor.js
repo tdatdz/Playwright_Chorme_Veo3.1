@@ -353,6 +353,10 @@ async function getComposerAttachmentCount(composer) {
   return await composer.locator('img,video,[data-slate-void="true"], [aria-label*="attachment"], [data-testid*="attachment"]').count();
 }
 
+function normalizePromptText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
 async function getComposerUserText(textbox) {
   return await textbox.evaluate((el) => {
     const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
@@ -369,6 +373,12 @@ async function getComposerUserText(textbox) {
       'Describe what you want to create',
       'What do you want to create?',
       'Give me',
+      'Tác nhân',
+      'Agent',
+      'Thêm thành phần',
+      'Nano Banana Pro',
+      'Nano Banana 2',
+      '1x'
     ];
 
     if (!text) return '';
@@ -409,10 +419,15 @@ async function clearComposer(page, composer, emit, workspaceId, jobId) {
 
   count = await getComposerAttachmentCount(composer);
   text = await getComposerUserText(textbox);
-  if (count > 0 || text.length > 0) {
-    throw new Error('Không clear được composer trước khi chạy job');
+  
+  if (count > 0) {
+    throw new Error('Không clear được attachment cũ trong composer trước khi chạy job');
   }
-  await emit('INFO', `composer cleared`);
+  if (text.length > 0) {
+    await emit('GUARD', `composer còn text/placeholder sau clear, sẽ overwrite bằng prompt job: "${text.slice(0, 80)}"`);
+  }
+  
+  await emit('INFO', `composer cleared enough for next job`);
 }
 
 async function uploadReferenceToMediaLibrary(page, filePath, emit, workspaceId, jobId, slotIndex) {
@@ -521,14 +536,18 @@ async function submitJob(
     `prompt ${job.code}`,
     emit,
   );
-  const currentPrompt = (await textbox.innerText()).trim();
-  if (!currentPrompt.includes(job.prompt.slice(0, 80))) {
-    throw new Error('Prompt verification failed after fill. Text does not match.');
+  const currentPromptText = normalizePromptText(await getComposerUserText(initialComposer.textbox));
+  const expectedPrompt = normalizePromptText(job.prompt);
+
+  if (!currentPromptText.includes(expectedPrompt)) {
+    throw new Error(`Prompt verification failed after fill. Expected prompt not found. Current: "${currentPromptText.slice(0, 200)}"`);
   }
+  
   const finalCount = await getComposerAttachmentCount(composer);
   if (finalCount < expectedCount) {
     throw new Error(`Prompt verification failed after fill. Expected ${expectedCount} attachments but got ${finalCount}.`);
   }
+  
   await emit('SUCCESS', `Đã điền và xác minh prompt ${job.code}.`);
 
   const generateButton = await visibleUnique(

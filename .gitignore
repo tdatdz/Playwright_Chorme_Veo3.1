@@ -10,3 +10,5 @@ OutPut/
 .DS_Store
 artifacts/
 *.html
+diff.txt
+artifacts/

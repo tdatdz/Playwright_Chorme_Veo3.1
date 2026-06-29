@@ -353,37 +353,70 @@ async function getComposerAttachmentCount(composer) {
   return await composer.locator('img,video,[data-slate-void="true"], [aria-label*="attachment"], [data-testid*="attachment"]').count();
 }
 
+async function getComposerUserText(textbox) {
+  return await textbox.evaluate((el) => {
+    const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+
+    const placeholder =
+      el.getAttribute('aria-label') ||
+      el.getAttribute('data-placeholder') ||
+      el.getAttribute('placeholder') ||
+      '';
+
+    const ignored = [
+      'Bạn muốn tạo gì?',
+      'Bạn muốn tạo gì',
+      'Describe what you want to create',
+      'What do you want to create?',
+      'Give me',
+    ];
+
+    if (!text) return '';
+    if (placeholder && text === placeholder.trim()) return '';
+    if (ignored.some((item) => text.toLowerCase() === item.toLowerCase())) return '';
+
+    return text;
+  });
+}
+
 async function clearComposer(page, composer, emit, workspaceId, jobId) {
   let count = await getComposerAttachmentCount(composer);
   const { textbox } = await composerFor(page);
-  let text = (await textbox.innerText()).trim();
-  if (count === 0 && text.length === 0) return;
+  let text = await getComposerUserText(textbox);
+  if (count === 0 && text.length === 0) {
+    await emit('GUARD', 'composer đã sạch, bỏ qua clear');
+    return;
+  }
   
-  await emit('INFO', `[${workspaceId}/${jobId}] clearing composer (attachments: ${count}, text length: ${text.length})`);
+  await emit('INFO', `clearing composer (attachments: ${count}, text length: ${text.length})`);
   
-  const removeBtns = composer.locator('button[aria-label*="remove"], button[aria-label*="Delete"], button[aria-label*="Xóa"], button[title*="Xóa"]');
-  for (let i = 0; i < 5; i++) {
-    if (await removeBtns.count() > 0) {
-      await removeBtns.first().click().catch(() => {});
-      await page.waitForTimeout(500);
+  if (count > 0) {
+    const removeBtns = composer.locator('button[aria-label*="remove"], button[aria-label*="Delete"], button[aria-label*="Xóa"], button[title*="Xóa"]');
+    for (let i = 0; i < 5; i++) {
+      if (await removeBtns.count() > 0) {
+        await removeBtns.first().click().catch(() => {});
+        await page.waitForTimeout(500);
+      }
     }
   }
 
-  await textbox.click();
-  await page.keyboard.press('Control+a');
-  await page.keyboard.press('Backspace');
-  await page.waitForTimeout(500);
+  if (text.length > 0) {
+    await textbox.click();
+    await page.keyboard.press('Control+a');
+    await page.keyboard.press('Backspace');
+    await page.waitForTimeout(500);
+  }
 
   count = await getComposerAttachmentCount(composer);
-  text = (await textbox.innerText()).trim();
+  text = await getComposerUserText(textbox);
   if (count > 0 || text.length > 0) {
     throw new Error('Không clear được composer trước khi chạy job');
   }
-  await emit('INFO', `[${workspaceId}/${jobId}] composer cleared`);
+  await emit('INFO', `composer cleared`);
 }
 
 async function uploadReferenceToMediaLibrary(page, filePath, emit, workspaceId, jobId, slotIndex) {
-  await emit('INFO', `[${workspaceId}/${jobId}] uploading reference slot=${slotIndex} file=${filePath}`);
+  await emit('INFO', `uploading reference slot=${slotIndex} file=${filePath}`);
   const { composer } = await composerFor(page);
   
   const addButton = await visibleUnique(
@@ -411,11 +444,11 @@ async function uploadReferenceToMediaLibrary(page, filePath, emit, workspaceId, 
   }
   
   await page.waitForTimeout(1500);
-  await emit('INFO', `[${workspaceId}/${jobId}] uploaded reference slot=${slotIndex}`);
+  await emit('INFO', `uploaded reference slot=${slotIndex}`);
 }
 
 async function attachReferenceToPromptComposer(page, composer, expectedCount, emit, workspaceId, jobId, slotIndex) {
-  await emit('INFO', `[${workspaceId}/${jobId}] attaching reference slot=${slotIndex} method=plus-picker`);
+  await emit('INFO', `attaching reference slot=${slotIndex} method=plus-picker`);
   
   const mediaLibrary = page.locator('div[role="dialog"]');
   const firstThumbnail = mediaLibrary.locator('img, video').first();
@@ -426,7 +459,7 @@ async function attachReferenceToPromptComposer(page, composer, expectedCount, em
   if (await submitButton.isVisible().catch(() => false)) {
     await submitButton.click();
   } else {
-    await emit('INFO', `[${workspaceId}/${jobId}] attaching reference slot=${slotIndex} method=drag-drop`);
+    await emit('INFO', `attaching reference slot=${slotIndex} method=drag-drop`);
     const composerBox = await composer.boundingBox();
     const thumbBox = await firstThumbnail.boundingBox();
     if (composerBox && thumbBox) {
@@ -444,7 +477,7 @@ async function attachReferenceToPromptComposer(page, composer, expectedCount, em
   }
   
   await page.keyboard.press('Escape').catch(() => {});
-  await emit('INFO', `[${workspaceId}/${jobId}] reference attached slot=${slotIndex} count=${afterCount}/${expectedCount}`);
+  await emit('INFO', `reference attached slot=${slotIndex} count=${afterCount}/${expectedCount}`);
 }
 
 async function submitJob(
@@ -496,7 +529,7 @@ async function submitJob(
   if (finalCount < expectedCount) {
     throw new Error(`Prompt verification failed after fill. Expected ${expectedCount} attachments but got ${finalCount}.`);
   }
-  await emit('SUCCESS', `[${workspaceId}/${job.id}] Đã điền và xác minh prompt ${job.code}.`);
+  await emit('SUCCESS', `Đã điền và xác minh prompt ${job.code}.`);
 
   const generateButton = await visibleUnique(
     composer.locator(

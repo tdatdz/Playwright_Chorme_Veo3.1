@@ -3,6 +3,12 @@ import fs from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  getMaskedProviders,
+  addOrUpdateProvider,
+  deleteProvider,
+  getProviderById
+} from './ai-provider-store.js';
 import { authenticate } from './auth.js';
 import {
   createBatchWorkspace,
@@ -1059,6 +1065,150 @@ async function api(request, response, pathname) {
       { workspaceId }
     );
     sendJson(response, 200, result);
+    return;
+  }
+
+  
+  if (request.method === 'GET' && pathname === '/api/ai/providers') {
+    const data = await getMaskedProviders();
+    sendJson(response, 200, data);
+    return;
+  }
+
+  if (request.method === 'POST' && pathname === '/api/ai/providers') {
+    const body = await parseJsonBody(request);
+    const saved = await addOrUpdateProvider(body);
+    sendJson(response, 200, saved);
+    return;
+  }
+
+  if (request.method === 'DELETE' && pathname.startsWith('/api/ai/providers/')) {
+    const id = pathname.substring('/api/ai/providers/'.length);
+    await deleteProvider(id);
+    sendJson(response, 200, { success: true });
+    return;
+  }
+
+  if (request.method === 'POST' && pathname === '/api/ai/test') {
+    const body = await parseJsonBody(request);
+    let baseUrl = String(body.baseUrl || '').trim();
+    const apiKey = String(body.apiKey || '').trim();
+    if (!baseUrl) {
+      sendJson(response, 400, { error: 'Base URL không được để trống.' });
+      return;
+    }
+    if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+    
+    const abort = new AbortController();
+    const timeout = setTimeout(() => abort.abort(), 15000);
+    
+    try {
+      const res = await fetch(`${baseUrl}/models`, {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        signal: abort.signal
+      });
+      clearTimeout(timeout);
+      
+      if (res.status === 401 || res.status === 403) {
+        sendJson(response, 401, { error: 'API key sai hoặc hết hạn.' });
+        return;
+      }
+      if (res.status === 404) {
+        sendJson(response, 404, { error: 'Base URL có vẻ sai. Với 9Router hãy dùng http://127.0.0.1:20128/v1' });
+        return;
+      }
+      if (!res.ok) {
+        sendJson(response, res.status, { error: `Lỗi kết nối HTTP ${res.status}: ${res.statusText}` });
+        return;
+      }
+      
+      const data = await res.json();
+      if (!data || !data.data || data.data.length === 0) {
+        sendJson(response, 200, { models: [], error: 'Kết nối được nhưng chưa thấy model. Hãy kiểm tra provider trong 9Router.' });
+        return;
+      }
+      sendJson(response, 200, { models: data.data.map(m => m.id) });
+    } catch (error) {
+      clearTimeout(timeout);
+      if (error.name === 'AbortError') {
+        sendJson(response, 504, { error: 'Model phản hồi quá lâu. Thử model khác hoặc kiểm tra mạng.' });
+      } else if (error.message.includes('ECONNREFUSED') || error.message.includes('fetch failed')) {
+        sendJson(response, 502, { error: 'Không thấy 9Router hoặc server đang chạy. Hãy mở 9Router trước.' });
+      } else {
+        sendJson(response, 500, { error: `Lỗi kỹ thuật: ${error.message}` });
+      }
+    }
+    return;
+  }
+
+  if (request.method === 'POST' && pathname === '/api/ai/generate') {
+    const body = await parseJsonBody(request);
+    const provider = await getProviderById(body.providerId);
+    if (!provider) {
+      sendJson(response, 404, { error: 'Không tìm thấy cấu hình Provider này.' });
+      return;
+    }
+    
+    let baseUrl = provider.baseUrl;
+    if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+    
+    const abort = new AbortController();
+    const timeout = setTimeout(() => abort.abort(), 60000);
+    
+    try {
+      const messages = [
+        { role: 'system', content: 'You improve image generation prompts. Output ONLY the improved prompt, no prefix or explanation.' },
+        { role: 'user', content: String(body.input) }
+      ];
+      
+      const res = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${provider.apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: body.model || provider.defaultModel,
+          messages,
+          temperature: body.options?.temperature || 0.7,
+          max_tokens: body.options?.max_tokens || 500
+        }),
+        signal: abort.signal
+      });
+      clearTimeout(timeout);
+      
+      if (!res.ok) {
+        let errStr = res.statusText;
+        try {
+          const errBody = await res.json();
+          if (errBody.error && errBody.error.message) errStr = errBody.error.message;
+        } catch(e) {}
+        sendJson(response, res.status, { error: `AI Error (${res.status}): ${errStr}` });
+        return;
+      }
+      
+      const data = await res.json();
+      let text = '';
+      if (data.choices && data.choices[0]) {
+        text = data.choices[0].message?.content || data.choices[0].text || '';
+      }
+      if (!text) {
+        sendJson(response, 500, { error: 'AI không trả về text.' });
+        return;
+      }
+      
+      sendJson(response, 200, { result: text.trim() });
+    } catch (error) {
+      clearTimeout(timeout);
+      if (error.name === 'AbortError') {
+        sendJson(response, 504, { error: 'AI phản hồi quá lâu (Timeout 60s).' });
+      } else {
+        sendJson(response, 500, { error: `Lỗi kết nối AI: ${error.message}` });
+      }
+    }
     return;
   }
 

@@ -1022,6 +1022,15 @@ elements.batchRows.addEventListener('click', (event) => {
   if (action === 'retry') {
     job.status = 'waiting';
     job.progress = 0;
+    job.result = null;
+    job.results = [];
+    job.outputUrl = null;
+    job.outputPath = null;
+    job.assetPath = null;
+    job.generatedAt = null;
+    job.completedAt = null;
+    job.lastProgressAt = null;
+    job.hasResult = false;
     job.selected = true;
     renderJobs();
     schedulePersist();
@@ -1780,3 +1789,259 @@ await loadFlowSessions().catch(() => {});
 renderJobs();
 await refreshStatus();
 setInterval(refreshStatus, 3_000);
+
+
+// --- AI Provider Center Logic ---
+window.aiProviders = { providers: [], defaultProviderId: null };
+let currentAiWizardConfig = null;
+let currentAiOptimizeJob = null;
+
+async function loadAiProviders() {
+  try {
+    const res = await fetch('/api/ai/providers');
+    if (res.ok) {
+      window.aiProviders = await res.json();
+    }
+  } catch (e) {
+    console.error('Failed to load AI providers', e);
+  }
+}
+
+function renderAiProviderList() {
+  const list = window.aiProviders.providers;
+  if (!list || list.length === 0) {
+    elements.aiProviderEmptyState.hidden = false;
+    elements.aiProviderListContainer.hidden = true;
+  } else {
+    elements.aiProviderEmptyState.hidden = true;
+    elements.aiProviderListContainer.hidden = false;
+    elements.aiProviderCards.innerHTML = list.map(p => `
+      <div style="background: #27272a; padding: 16px; border-radius: 8px; margin-bottom: 12px; border: 1px solid #3f3f46;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <h3 style="margin: 0; font-size: 16px; color: #fff;">${escapeHtml(p.name)}</h3>
+          <span style="background: rgba(74, 222, 128, 0.15); color: #4ade80; padding: 2px 8px; border-radius: 4px; font-size: 12px;">Đã kết nối</span>
+        </div>
+        <div style="font-size: 13px; color: #a1a1aa; margin-bottom: 4px;">Model mặc định: <strong style="color: #fff;">${escapeHtml(p.defaultModel)}</strong></div>
+        <div style="font-size: 13px; color: #a1a1aa; margin-bottom: 12px;">API Key: <code style="background: #18181b; padding: 2px 4px; border-radius: 4px;">${escapeHtml(p.apiKeyMasked)}</code></div>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn" onclick="deleteAiProvider('${p.id}')">Xóa</button>
+        </div>
+      </div>
+    `).join('');
+  }
+}
+
+window.deleteAiProvider = async function(id) {
+  if (!confirm('Bạn có chắc muốn xóa kết nối này?')) return;
+  await fetch(`/api/ai/providers/${id}`, { method: 'DELETE' });
+  await loadAiProviders();
+  renderAiProviderList();
+  renderJobs(); // to re-enable/disable buttons
+};
+
+function openAiWizard(type) {
+  elements.aiProviderListState.hidden = true;
+  elements.aiProviderModelSelectState.hidden = true;
+  elements.aiProviderWizardState.hidden = false;
+  
+  elements.aiProviderErrorBox.hidden = true;
+  elements.aiProviderTechErrorText.hidden = true;
+  
+  elements.aiProviderKey.value = '';
+  
+  if (type === '9router') {
+    elements.aiProviderName.value = '9Router Local';
+    elements.aiProviderBaseUrl.value = 'http://127.0.0.1:20128/v1';
+  } else {
+    elements.aiProviderName.value = 'Custom Provider';
+    elements.aiProviderBaseUrl.value = '';
+  }
+}
+
+elements.openAiProviderBtn?.addEventListener('click', async () => {
+  await loadAiProviders();
+  elements.aiProviderWizardState.hidden = true;
+  elements.aiProviderModelSelectState.hidden = true;
+  elements.aiProviderListState.hidden = false;
+  renderAiProviderList();
+  elements.aiProviderModal.hidden = false;
+});
+
+elements.closeAiProviderModal?.addEventListener('click', () => {
+  elements.aiProviderModal.hidden = true;
+});
+
+[elements.add9RouterBtn, elements.addMore9RouterBtn].forEach(btn => btn?.addEventListener('click', () => openAiWizard('9router')));
+[elements.addCustomAIBtn, elements.addMoreCustomAIBtn].forEach(btn => btn?.addEventListener('click', () => openAiWizard('custom')));
+
+elements.cancelAiWizardBtn?.addEventListener('click', () => {
+  elements.aiProviderWizardState.hidden = true;
+  elements.aiProviderListState.hidden = false;
+});
+
+elements.toggleAiKeyVisibility?.addEventListener('click', () => {
+  if (elements.aiProviderKey.type === 'password') {
+    elements.aiProviderKey.type = 'text';
+    elements.toggleAiKeyVisibility.textContent = '🔒';
+  } else {
+    elements.aiProviderKey.type = 'password';
+    elements.toggleAiKeyVisibility.textContent = '👁';
+  }
+});
+
+elements.pasteAiKeyBtn?.addEventListener('click', async () => {
+  try {
+    const text = await navigator.clipboard.readText();
+    elements.aiProviderKey.value = text;
+  } catch (e) {
+    alert('Không thể đọc clipboard.');
+  }
+});
+
+elements.showAiProviderTechError?.addEventListener('click', () => {
+  elements.aiProviderTechErrorText.hidden = !elements.aiProviderTechErrorText.hidden;
+});
+
+elements.testAiConnectionBtn?.addEventListener('click', async () => {
+  const baseUrl = elements.aiProviderBaseUrl.value.trim();
+  const apiKey = elements.aiProviderKey.value.trim();
+  const name = elements.aiProviderName.value.trim();
+  
+  if (!baseUrl) {
+    alert('Vui lòng nhập Base URL');
+    return;
+  }
+  
+  elements.testAiConnectionBtn.disabled = true;
+  elements.testAiConnectionBtn.textContent = 'Đang kiểm tra...';
+  elements.aiProviderErrorBox.hidden = true;
+  
+  try {
+    const res = await fetch('/api/ai/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseUrl, apiKey })
+    });
+    const data = await res.json();
+    
+    if (!res.ok || data.error) {
+      elements.aiProviderErrorBox.hidden = false;
+      elements.aiProviderErrorText.textContent = data.error || 'Lỗi không xác định';
+      elements.aiProviderTechErrorText.textContent = JSON.stringify(data, null, 2);
+    } else {
+      currentAiWizardConfig = { baseUrl, apiKey, name };
+      elements.aiProviderWizardState.hidden = true;
+      elements.aiProviderModelSelectState.hidden = false;
+      
+      elements.aiProviderModelSelect.innerHTML = data.models.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+    }
+  } catch (e) {
+    elements.aiProviderErrorBox.hidden = false;
+    elements.aiProviderErrorText.textContent = 'Lỗi mạng khi kiểm tra kết nối.';
+    elements.aiProviderTechErrorText.textContent = e.message;
+  } finally {
+    elements.testAiConnectionBtn.disabled = false;
+    elements.testAiConnectionBtn.textContent = 'Kiểm tra kết nối';
+  }
+});
+
+elements.finishAiWizardBtn?.addEventListener('click', async () => {
+  const defaultModel = elements.aiProviderModelSelect.value;
+  elements.finishAiWizardBtn.disabled = true;
+  elements.finishAiWizardBtn.textContent = 'Đang lưu...';
+  
+  try {
+    const res = await fetch('/api/ai/providers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...currentAiWizardConfig, defaultModel })
+    });
+    if (res.ok) {
+      await loadAiProviders();
+      elements.aiProviderModelSelectState.hidden = true;
+      elements.aiProviderListState.hidden = false;
+      renderAiProviderList();
+      renderJobs(); // update buttons
+    }
+  } finally {
+    elements.finishAiWizardBtn.disabled = false;
+    elements.finishAiWizardBtn.textContent = 'Hoàn tất';
+  }
+});
+
+// Row button event delegation for AI optimize
+elements.batchRows?.addEventListener('click', async (event) => {
+  const button = event.target.closest('button[data-action="ai-optimize"]');
+  if (!button) return;
+  
+  const job = jobFromElement(button);
+  if (!job) return;
+  
+  if (!window.aiProviders?.defaultProviderId) {
+    alert('Bạn chưa cấu hình AI Provider. Vui lòng vào "AI Provider Center".');
+    return;
+  }
+  
+  const originalPrompt = job.prompt || '';
+  if (!originalPrompt.trim()) {
+    alert('Prompt đang trống.');
+    return;
+  }
+  
+  currentAiOptimizeJob = job;
+  const oldText = button.textContent;
+  button.textContent = '⏳ Đang tối ưu...';
+  button.disabled = true;
+  
+  try {
+    const res = await fetch('/api/ai/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        providerId: window.aiProviders.defaultProviderId,
+        task: 'optimize_prompt',
+        input: originalPrompt,
+        options: { temperature: 0.7 }
+      })
+    });
+    
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi sinh prompt');
+    
+    elements.aiPreviewOriginal.value = originalPrompt;
+    elements.aiPreviewProposed.value = data.result;
+    elements.aiPreviewModal.hidden = false;
+  } catch (e) {
+    alert('Lỗi AI: ' + e.message);
+  } finally {
+    button.textContent = oldText;
+    button.disabled = false;
+  }
+});
+
+elements.cancelAiPreviewBtn?.addEventListener('click', () => {
+  elements.aiPreviewModal.hidden = true;
+  currentAiOptimizeJob = null;
+});
+
+elements.copyAiPreviewBtn?.addEventListener('click', () => {
+  navigator.clipboard.writeText(elements.aiPreviewProposed.value);
+  const old = elements.copyAiPreviewBtn.textContent;
+  elements.copyAiPreviewBtn.textContent = 'Copied!';
+  setTimeout(() => elements.copyAiPreviewBtn.textContent = old, 1500);
+});
+
+elements.applyAiPreviewBtn?.addEventListener('click', () => {
+  if (currentAiOptimizeJob) {
+    currentAiOptimizeJob.prompt = elements.aiPreviewProposed.value;
+    renderJobs();
+    schedulePersist();
+  }
+  elements.aiPreviewModal.hidden = true;
+  currentAiOptimizeJob = null;
+});
+
+// Load providers on init
+if (window.location.pathname === '/') {
+  loadAiProviders();
+}

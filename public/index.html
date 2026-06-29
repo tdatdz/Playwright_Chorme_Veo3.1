@@ -466,44 +466,38 @@
     <!-- AI Provider Modal -->
     <div id="aiProviderModal" class="image-modal" hidden>
       <button id="closeAiProviderModal" class="modal-close" aria-label="Đóng">×</button>
-      <div class="modal-content" style="background: #1e1e2e; padding: 24px; border-radius: 8px; max-width: 600px; width: 100%; border: 1px solid #333; color: #fff;">
+      <div class="modal-content" style="background: #1e1e2e; padding: 24px; border-radius: 8px; max-width: 640px; width: 100%; border: 1px solid #333; color: #fff;">
         <h2 style="margin-top: 0; margin-bottom: 8px; font-weight: 500;">AI Provider Center</h2>
-        <p style="margin-top: 0; margin-bottom: 24px; color: #a1a1aa; font-size: 14px;">Quản lý model AI dùng để tối ưu prompt, dịch prompt, tạo scene.</p>
+        <p style="margin-top: 0; margin-bottom: 20px; color: #a1a1aa; font-size: 14px;">Quản lý model AI dùng để tối ưu prompt, dịch prompt, tạo scene.</p>
         
         <div id="aiProviderListState">
-          <div id="aiProviderEmptyState" style="text-align: center; padding: 40px 0;">
-            <p style="color: #a1a1aa; margin-bottom: 24px;">Bạn chưa kết nối AI model nào.<br>Kết nối 9Router Local hoặc Custom OpenAI-Compatible để bắt đầu.</p>
-            <div style="display: flex; gap: 12px; justify-content: center;">
-              <button class="btn primary" onclick="startAiProviderWizard('9router')">Kết nối 9Router Local</button>
-              <button class="btn" onclick="startAiProviderWizard('custom')">Kết nối Custom Endpoint</button>
+          <div class="ai-tabs" style="display: flex; gap: 4px; border-bottom: 1px solid #3f3f46; margin-bottom: 20px;">
+            <button class="ai-tab active" data-tab="oauth">OAuth</button>
+            <button class="ai-tab" data-tab="api">API</button>
+            <button class="ai-tab" data-tab="endpoint">Endpoint</button>
+          </div>
+
+          <div id="aiProviderEmptyState" style="text-align: center; padding: 40px 0; display: none;">
+            <p id="aiProviderEmptyText" style="color: #a1a1aa; margin-bottom: 24px;">Chưa có provider nào.</p>
+            <div style="display: flex; justify-content: center;">
+              <button id="emptyAddConnectionBtn" class="btn primary" onclick="startAiProviderWizard()">+ Thêm kết nối</button>
             </div>
           </div>
           
           <div id="aiProviderListContainer" hidden>
             <div id="aiProviderCards"></div>
             <div style="margin-top: 20px; display: flex; justify-content: center;">
-              <button id="addConnectionBtn" class="btn primary" style="width: 100%;">+ Thêm kết nối model</button>
+              <button id="addConnectionBtn" class="btn primary" style="width: 100%;" onclick="startAiProviderWizard()">+ Thêm kết nối</button>
             </div>
           </div>
         </div>
 
         <div id="aiProviderAddStep1State" hidden>
           <div class="wizard-header" style="margin-bottom: 20px;">
-            <strong id="wizardTitle1">Bước 1: Chọn loại kết nối</strong>
+            <strong id="wizardTitle1">Bước 1: Chọn mẫu kết nối</strong>
           </div>
-          <div style="display: flex; flex-direction: column; gap: 12px;">
-            <button class="btn" style="text-align: left; padding: 12px;" onclick="startAiProviderWizardStep2('9router')">
-              <strong>9Router Local</strong><br>
-              <span style="font-size: 12px; color: #a1a1aa;">Dùng cổng local 127.0.0.1:20128</span>
-            </button>
-            <button class="btn" style="text-align: left; padding: 12px;" onclick="startAiProviderWizardStep2('custom_api')">
-              <strong>Custom OpenAI-Compatible (API Key)</strong><br>
-              <span style="font-size: 12px; color: #a1a1aa;">Dành cho OpenRouter, Groq, Together...</span>
-            </button>
-            <button class="btn" style="text-align: left; padding: 12px;" onclick="startAiProviderWizardStep2('custom_no_auth')">
-              <strong>No Auth Local Endpoint</strong><br>
-              <span style="font-size: 12px; color: #a1a1aa;">Dành cho LM Studio, Ollama không cần auth</span>
-            </button>
+          <div id="wizardPresets" style="display: flex; flex-direction: column; gap: 12px;">
+            <!-- Rendered dynamically via JS depending on current tab -->
           </div>
           <div style="margin-top: 16px;">
             <button class="btn" onclick="cancelAiWizard()">Quay lại</button>
@@ -518,19 +512,14 @@
           <div style="display: flex; flex-direction: column; gap: 16px;">
             <div class="input-group">
               <label>Tên kết nối</label>
-              <input type="text" id="aiProviderName" class="form-input" placeholder="Ví dụ: 9Router Local" />
+              <input type="text" id="aiProviderName" class="form-input" placeholder="Tên provider" />
             </div>
             
-            <div class="input-group">
-              <label>Endpoint URL</label>
-              <input type="text" id="aiProviderBaseUrl" class="form-input" placeholder="http://127.0.0.1:20128/v1" />
-            </div>
-
-            <div class="input-group">
+            <div class="input-group" id="aiProviderAuthModeGroup">
               <label>Authentication Mode</label>
               <div style="display: flex; gap: 16px; margin-top: 4px;">
                 <label style="cursor: pointer; display: flex; align-items: center; gap: 4px; font-weight: normal; color: #fff;"><input type="radio" name="aiAuthMode" value="api_key"> API Key</label>
-                <label style="cursor: pointer; display: flex; align-items: center; gap: 4px; font-weight: normal; color: #fff;"><input type="radio" name="aiAuthMode" value="oauth"> OAuth Token</label>
+                <label style="cursor: pointer; display: flex; align-items: center; gap: 4px; font-weight: normal; color: #fff;"><input type="radio" name="aiAuthMode" value="oauth"> Bearer Token</label>
                 <label style="cursor: pointer; display: flex; align-items: center; gap: 4px; font-weight: normal; color: #fff;"><input type="radio" name="aiAuthMode" value="no_auth"> No Auth</label>
               </div>
             </div>
@@ -542,8 +531,20 @@
                 <button type="button" id="toggleAiKeyVisibility" class="btn" style="min-width: 40px; padding: 0;">👁</button>
                 <button type="button" id="pasteAiKeyBtn" class="btn">Dán</button>
               </div>
-              <span style="font-size: 11px; color: #a1a1aa; margin-top: 4px;">Chỉ lưu trên máy bạn. Bỏ trống nếu muốn giữ nguyên key cũ khi sửa.</span>
+              <span style="font-size: 11px; color: #a1a1aa; margin-top: 4px;">Chỉ lưu trên server của bạn. Bỏ trống nếu muốn giữ nguyên key cũ.</span>
             </div>
+
+            <!-- Advanced Settings -->
+            <details id="aiProviderAdvanced" style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 6px; border: 1px solid #3f3f46;">
+              <summary style="cursor: pointer; font-size: 13px; color: #d4d4d8; font-weight: 500;">Cài đặt nâng cao</summary>
+              <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 16px;">
+                <div class="input-group">
+                  <label>Endpoint URL (OpenAI-compatible)</label>
+                  <input type="text" id="aiProviderBaseUrl" class="form-input" placeholder="https://example.com/v1" />
+                  <span style="font-size: 11px; color: #a1a1aa; margin-top: 4px;">URL bắt buộc phải có để gọi model. Format tùy vào API tương thích.</span>
+                </div>
+              </div>
+            </details>
 
             <div id="aiProviderErrorBox" hidden style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); padding: 12px; border-radius: 6px; color: #fca5a5; font-size: 13px;">
               <span id="aiProviderErrorText"></span>
@@ -578,7 +579,6 @@
 
       </div>
     </div>
-
     <!-- AI Optimize Preview Modal -->
     <div id="aiPreviewModal" class="image-modal" hidden>
       <div class="modal-content" style="background: #1e1e2e; padding: 24px; border-radius: 8px; max-width: 600px; width: 100%; border: 1px solid #333; color: #fff;">

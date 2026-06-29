@@ -1637,3 +1637,32 @@ tr.is-job-locked .copy-prompt-btn {
   border-color: #4ade80;
   box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.4);
 }
+
+/* --- AI Provider Tabs --- */
+.ai-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid #3f3f46;
+  margin-bottom: 20px;
+}
+
+.ai-tab {
+  background: transparent;
+  border: none;
+  color: #a1a1aa;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.ai-tab:hover {
+  color: #d4d4d8;
+}
+
+.ai-tab.active {
+  color: #4ade80;
+  border-bottom-color: #4ade80;
+}

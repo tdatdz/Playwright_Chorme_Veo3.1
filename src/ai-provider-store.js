@@ -47,6 +47,7 @@ export async function getMaskedProviders() {
   return {
     providers: data.providers.map(p => ({
       id: p.id,
+      category: p.category || 'api',
       name: p.name,
       type: p.type || 'openai-compatible',
       baseUrl: p.baseUrl,
@@ -80,6 +81,7 @@ export async function addOrUpdateProvider(provider) {
 
     data.providers[existingIndex] = {
       ...old,
+      category: provider.category || old.category || 'api',
       name: provider.name || old.name,
       baseUrl: provider.baseUrl || old.baseUrl,
       authMode: provider.authMode || old.authMode,
@@ -94,6 +96,7 @@ export async function addOrUpdateProvider(provider) {
     data.providers.push({
       ...provider,
       id: provider.id || `provider_${Date.now()}`,
+      category: provider.category || 'api',
       authMode: provider.authMode || 'api_key',
       lastTestStatus: provider.lastTestStatus || 'untested',
       lastTestedAt: provider.lastTestedAt || null,

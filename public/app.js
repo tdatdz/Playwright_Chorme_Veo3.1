@@ -1,4 +1,5 @@
 const elements = {
+  aiProviderAddStep1State: document.querySelector('#aiProviderAddStep1State'),
   openAiProviderBtn: document.querySelector('#openAiProviderBtn'),
   aiProviderModal: document.querySelector('#aiProviderModal'),
   closeAiProviderModal: document.querySelector('#closeAiProviderModal'),
@@ -1836,6 +1837,7 @@ window.aiProviders = { providers: [], defaultProviderId: null };
 let currentAiWizardConfig = null;
 let currentAiOptimizeJob = null;
 let editingProviderId = null;
+let currentProviderTab = 'api';
 
 async function loadAiProviders() {
   try {
@@ -1856,17 +1858,51 @@ function getProviderStatusBadge(provider) {
   }
 }
 
+function switchAiTab(tabId) {
+  currentProviderTab = tabId;
+  document.querySelectorAll('.ai-tab').forEach(btn => {
+    if (btn.dataset.tab === tabId) btn.classList.add('active');
+    else btn.classList.remove('active');
+  });
+  renderAiProviderList();
+}
+
+document.querySelectorAll('.ai-tab').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    switchAiTab(e.target.dataset.tab);
+  });
+});
+
 function renderAiProviderList() {
-  const list = window.aiProviders.providers;
-  if (!list || list.length === 0) {
+  const allProviders = window.aiProviders.providers || [];
+  const list = allProviders.filter(p => (p.category || 'api') === currentProviderTab);
+  
+  if (list.length === 0) {
     elements.aiProviderEmptyState.hidden = false;
     elements.aiProviderListContainer.hidden = true;
+    const emptyText = document.querySelector('#aiProviderEmptyText');
+    const emptyAddBtn = document.querySelector('#emptyAddConnectionBtn');
+    if (currentProviderTab === 'api') {
+      emptyText.innerHTML = 'Chưa có provider API Key nào.<br>Kết nối OpenAI, Gemini hoặc Anthropic để dùng AI Optimize.';
+      emptyAddBtn.textContent = '+ Thêm API Provider';
+    } else if (currentProviderTab === 'oauth') {
+      emptyText.innerHTML = 'Chưa có kết nối OAuth/Bearer Token.';
+      emptyAddBtn.textContent = '+ Thêm OAuth Connection';
+    } else {
+      emptyText.innerHTML = 'Chưa có endpoint nào.<br>Thêm 9Router, LM Studio hoặc endpoint OpenAI-compatible.';
+      emptyAddBtn.textContent = '+ Thêm Endpoint';
+    }
   } else {
     elements.aiProviderEmptyState.hidden = true;
     elements.aiProviderListContainer.hidden = false;
+    const addBtn = document.querySelector('#addConnectionBtn');
+    if (currentProviderTab === 'api') addBtn.textContent = '+ Thêm API Provider';
+    else if (currentProviderTab === 'oauth') addBtn.textContent = '+ Thêm OAuth Connection';
+    else addBtn.textContent = '+ Thêm Endpoint';
+
     elements.aiProviderCards.innerHTML = list.map(p => {
       const isDefault = p.id === window.aiProviders.defaultProviderId;
-      const keyDisplay = p.authMode === 'api_key' ? p.apiKeyMasked : (p.authMode === 'oauth' ? p.oauthMasked : 'N/A');
+      const keyDisplay = p.authMode === 'api_key' ? p.apiKeyMasked : (p.authMode === 'oauth' ? p.oauthMasked : 'No Auth');
       return `
       <div style="background: #27272a; padding: 16px; border-radius: 8px; margin-bottom: 12px; border: ${isDefault ? '1px solid #4ade80' : '1px solid #3f3f46'}; position: relative;">
         ${isDefault ? '<div style="position: absolute; top: -10px; right: 10px; background: #4ade80; color: #000; font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 10px;">DEFAULT</div>' : ''}
@@ -1928,13 +1964,32 @@ window.testSavedProvider = async function(id) {
   renderAiProviderList();
 };
 
-window.startAiProviderWizard = function(type) {
+window.startAiProviderWizard = function() {
   elements.aiProviderListState.hidden = true;
   elements.aiProviderModelSelectState.hidden = true;
   elements.aiProviderAddStep1State.hidden = false;
   elements.aiProviderWizardState.hidden = true;
   editingProviderId = null;
   currentAiWizardConfig = null;
+  
+  const presetsContainer = document.querySelector('#wizardPresets');
+  if (currentProviderTab === 'api') {
+    presetsContainer.innerHTML = `
+      <button class="btn" style="text-align: left; padding: 12px;" onclick="startAiProviderWizardStep2('preset_openai')"><strong>OpenAI</strong><br><span style="font-size: 12px; color: #a1a1aa;">Mặc định: https://api.openai.com/v1</span></button>
+      <button class="btn" style="text-align: left; padding: 12px;" onclick="startAiProviderWizardStep2('preset_gemini')"><strong>Gemini (OpenAI-compatible)</strong><br><span style="font-size: 12px; color: #a1a1aa;">Mặc định: https://generativelanguage.googleapis.com/v1beta/openai</span></button>
+      <button class="btn" style="text-align: left; padding: 12px;" onclick="startAiProviderWizardStep2('custom_api')"><strong>Custom API Provider</strong><br><span style="font-size: 12px; color: #a1a1aa;">Groq, Together, v.v...</span></button>
+    `;
+  } else if (currentProviderTab === 'oauth') {
+    presetsContainer.innerHTML = `
+      <button class="btn" style="text-align: left; padding: 12px;" onclick="startAiProviderWizardStep2('custom_oauth')"><strong>Custom Bearer Provider</strong><br><span style="font-size: 12px; color: #a1a1aa;">Sử dụng OAuth Token thủ công</span></button>
+    `;
+  } else {
+    presetsContainer.innerHTML = `
+      <button class="btn" style="text-align: left; padding: 12px;" onclick="startAiProviderWizardStep2('preset_9router')"><strong>9Router Local</strong><br><span style="font-size: 12px; color: #a1a1aa;">http://127.0.0.1:20128/v1</span></button>
+      <button class="btn" style="text-align: left; padding: 12px;" onclick="startAiProviderWizardStep2('preset_lmstudio')"><strong>LM Studio</strong><br><span style="font-size: 12px; color: #a1a1aa;">http://127.0.0.1:1234/v1</span></button>
+      <button class="btn" style="text-align: left; padding: 12px;" onclick="startAiProviderWizardStep2('custom_endpoint')"><strong>Custom Endpoint</strong><br><span style="font-size: 12px; color: #a1a1aa;">Ollama proxy, Local Endpoint khác</span></button>
+    `;
+  }
 };
 
 window.startAiProviderWizardStep2 = function(type) {
@@ -1943,20 +1998,46 @@ window.startAiProviderWizardStep2 = function(type) {
   elements.aiProviderErrorBox.hidden = true;
   elements.aiProviderTechErrorText.hidden = true;
   elements.aiProviderKey.value = '';
-  document.querySelector('#aiProviderKeyLabel').textContent = 'API Key / Token';
+  document.querySelector('#aiProviderKeyLabel').textContent = currentProviderTab === 'oauth' ? 'OAuth / Bearer Token' : 'API Key / Token';
+  document.querySelector('#aiProviderAdvanced').open = false;
   
-  if (type === '9router') {
+  if (currentProviderTab === 'api') {
+    document.querySelector('#aiProviderAuthModeGroup').style.display = 'none';
+    document.querySelector('input[name="aiAuthMode"][value="api_key"]').checked = true;
+    document.querySelector('#aiProviderKeyGroup').style.display = 'flex';
+    document.querySelector('#aiProviderAdvanced').style.display = 'block';
+  } else if (currentProviderTab === 'oauth') {
+    document.querySelector('#aiProviderAuthModeGroup').style.display = 'none';
+    document.querySelector('input[name="aiAuthMode"][value="oauth"]').checked = true;
+    document.querySelector('#aiProviderKeyGroup').style.display = 'flex';
+    document.querySelector('#aiProviderAdvanced').style.display = 'block';
+  } else {
+    document.querySelector('#aiProviderAuthModeGroup').style.display = 'flex';
+    document.querySelector('input[name="aiAuthMode"][value="no_auth"]').checked = true;
+    document.querySelector('#aiProviderAdvanced').open = true;
+    document.querySelector('#aiProviderAdvanced').style.display = 'block'; // Always show
+  }
+  
+  if (type === 'preset_openai') {
+    elements.aiProviderName.value = 'OpenAI';
+    elements.aiProviderBaseUrl.value = 'https://api.openai.com/v1';
+  } else if (type === 'preset_gemini') {
+    elements.aiProviderName.value = 'Gemini';
+    elements.aiProviderBaseUrl.value = 'https://generativelanguage.googleapis.com/v1beta/openai';
+  } else if (type === 'preset_9router') {
     elements.aiProviderName.value = '9Router Local';
     elements.aiProviderBaseUrl.value = 'http://127.0.0.1:20128/v1';
     document.querySelector('input[name="aiAuthMode"][value="api_key"]').checked = true;
-  } else if (type === 'custom_no_auth') {
-    elements.aiProviderName.value = 'Local AI (No Auth)';
-    elements.aiProviderBaseUrl.value = 'http://127.0.0.1:11434/v1';
+  } else if (type === 'preset_lmstudio') {
+    elements.aiProviderName.value = 'LM Studio';
+    elements.aiProviderBaseUrl.value = 'http://127.0.0.1:1234/v1';
     document.querySelector('input[name="aiAuthMode"][value="no_auth"]').checked = true;
+  } else if (type === 'custom_oauth') {
+    elements.aiProviderName.value = 'Custom Bearer Provider';
+    elements.aiProviderBaseUrl.value = 'https://';
   } else {
     elements.aiProviderName.value = 'Custom Provider';
-    elements.aiProviderBaseUrl.value = '';
-    document.querySelector('input[name="aiAuthMode"][value="api_key"]').checked = true;
+    elements.aiProviderBaseUrl.value = 'http://';
   }
   
   updateAiAuthModeUI();
@@ -1981,6 +2062,20 @@ window.editAiProvider = function(id) {
   if (p.authMode === 'api_key') elements.aiProviderKey.value = p.apiKeyMasked || '';
   else if (p.authMode === 'oauth') elements.aiProviderKey.value = p.oauthMasked || '';
   else elements.aiProviderKey.value = '';
+  
+  if (p.category === 'api') {
+    document.querySelector('#aiProviderAuthModeGroup').style.display = 'none';
+    document.querySelector('#aiProviderKeyGroup').style.display = 'flex';
+    document.querySelector('#aiProviderAdvanced').style.display = 'block';
+  } else if (p.category === 'oauth') {
+    document.querySelector('#aiProviderAuthModeGroup').style.display = 'none';
+    document.querySelector('#aiProviderKeyGroup').style.display = 'flex';
+    document.querySelector('#aiProviderAdvanced').style.display = 'block';
+  } else {
+    document.querySelector('#aiProviderAuthModeGroup').style.display = 'flex';
+    document.querySelector('#aiProviderAdvanced').style.display = 'block';
+    document.querySelector('#aiProviderAdvanced').open = true;
+  }
   
   updateAiAuthModeUI();
 };
@@ -2010,17 +2105,13 @@ window.cancelAiWizard = function() {
   currentAiWizardConfig = null;
 };
 
-document.querySelector('#addConnectionBtn')?.addEventListener('click', () => {
-  startAiProviderWizard('9router');
-});
-
 elements.openAiProviderBtn?.addEventListener('click', async () => {
   await loadAiProviders();
   elements.aiProviderAddStep1State.hidden = true;
   elements.aiProviderWizardState.hidden = true;
   elements.aiProviderModelSelectState.hidden = true;
   elements.aiProviderListState.hidden = false;
-  renderAiProviderList();
+  switchAiTab(currentProviderTab);
   elements.aiProviderModal.hidden = false;
 });
 
@@ -2058,7 +2149,7 @@ elements.testAiConnectionBtn?.addEventListener('click', async () => {
   const authMode = document.querySelector('input[name="aiAuthMode"]:checked').value;
   
   if (!baseUrl) {
-    alert('Vui lòng nhập Base URL');
+    alert('Vui lòng nhập Base URL (Endpoint URL)');
     return;
   }
   
@@ -2067,7 +2158,7 @@ elements.testAiConnectionBtn?.addEventListener('click', async () => {
     return;
   }
   if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
-  if (!baseUrl.endsWith('/v1')) {
+  if (!baseUrl.endsWith('/v1') && !baseUrl.includes('generative')) {
     if (confirm('Base URL thường kết thúc bằng /v1. Bạn có muốn tự động thêm /v1 không?')) {
       baseUrl += '/v1';
       elements.aiProviderBaseUrl.value = baseUrl;
@@ -2081,7 +2172,6 @@ elements.testAiConnectionBtn?.addEventListener('click', async () => {
   let payload = { baseUrl, authMode };
   if (editingProviderId) {
     payload.providerId = editingProviderId;
-    // Check if key was changed
     const p = window.aiProviders.providers.find(x => x.id === editingProviderId);
     if (authMode === 'api_key' && rawKey && rawKey !== p.apiKeyMasked) payload.apiKey = rawKey;
     if (authMode === 'oauth' && rawKey && rawKey !== p.oauthMasked) payload.oauthToken = rawKey;
@@ -2105,6 +2195,7 @@ elements.testAiConnectionBtn?.addEventListener('click', async () => {
     } else {
       currentAiWizardConfig = payload;
       currentAiWizardConfig.name = name;
+      currentAiWizardConfig.category = editingProviderId ? window.aiProviders.providers.find(x => x.id === editingProviderId).category : currentProviderTab;
       elements.aiProviderWizardState.hidden = true;
       elements.aiProviderModelSelectState.hidden = false;
       
@@ -2161,7 +2252,7 @@ elements.batchRows?.addEventListener('click', async (event) => {
   if (!job) return;
   
   if (!window.aiProviders?.defaultProviderId) {
-    alert('Bạn cần kết nối AI model trước.');
+    alert('Bạn cần cấu hình AI Provider trước.');
     return;
   }
   

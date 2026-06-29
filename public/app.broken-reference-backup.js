@@ -207,9 +207,19 @@ function appendLog(event) {
 
 function statusLabel(job) {
   if (job.status === 'done') return 'XONG';
-  if (job.status === 'error') return 'LỖI';
-  if (job.status === 'running')
+  if (job.status === 'error' || job.progress === 'error') return 'LỖI';
+  if (job.status === 'running') {
+    if (job.progress === 'uploading_reference') return 'Đang tải ảnh';
+    if (job.progress === 'reference_uploaded') return 'Đã tải ảnh';
+    if (job.progress === 'attaching_reference') return 'Đang gắn ảnh';
+    if (job.progress === 'reference_attached') return 'Đã gắn ảnh';
+    if (job.progress === 'prompt_ready') return 'Sẵn sàng';
+    if (job.progress === 'generating') return 'Đang tạo';
+    if (typeof job.progress === 'string' && isNaN(Number(job.progress)) && job.progress !== '') {
+      return job.progress.toUpperCase();
+    }
     return `ĐANG ${Math.max(0, Number(job.progress || 0))}%`;
+  }
   return 'CHỜ';
 }
 

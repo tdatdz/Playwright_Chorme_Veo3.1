@@ -353,6 +353,148 @@ async function getComposerAttachmentCount(composer) {
   return await composer.locator('img,video,[data-slate-void="true"], [aria-label*="attachment"], [data-testid*="attachment"]').count();
 }
 
+function normalizePromptText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+async function getComposerUserText(textbox) {
+  return await textbox.evaluate((el) => {
+    const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+
+    const placeholder =
+      el.getAttribute('aria-label') ||
+      el.getAttribute('data-placeholder') ||
+      el.getAttribute('placeholder') ||
+      '';
+
+    const ignored = [
+      'Bạn muốn tạo gì?',
+      'Bạn muốn tạo gì',
+      'Describe what you want to create',
+      'What do you want to create?',
+      'Give me',
+      'Tác nhân',
+      'Agent',
+      'Thêm thành phần',
+      'Nano Banana Pro',
+      'Nano Banana 2',
+      '1x'
+    ];
+
+    if (!text) return '';
+    if (placeholder && text === placeholder.trim()) return '';
+    if (ignored.some((item) => text.toLowerCase() === item.toLowerCase())) return '';
+
+    return text;
+  });
+}
+
+async function clearComposer(page, composer, emit, workspaceId, jobId) {
+  let count = await getComposerAttachmentCount(composer);
+  const { textbox } = await composerFor(page);
+  let text = await getComposerUserText(textbox);
+  if (count === 0 && text.length === 0) {
+    await emit('GUARD', 'composer đã sạch, bỏ qua clear');
+    return;
+  }
+  
+  await emit('INFO', `clearing composer (attachments: ${count}, text length: ${text.length})`);
+  
+  if (count > 0) {
+    const removeBtns = composer.locator('button[aria-label*="remove"], button[aria-label*="Delete"], button[aria-label*="Xóa"], button[title*="Xóa"]');
+    for (let i = 0; i < 5; i++) {
+      if (await removeBtns.count() > 0) {
+        await removeBtns.first().click().catch(() => {});
+        await page.waitForTimeout(500);
+      }
+    }
+  }
+
+  if (text.length > 0) {
+    await textbox.click();
+    await page.keyboard.press('Control+a');
+    await page.keyboard.press('Backspace');
+    await page.waitForTimeout(500);
+  }
+
+  count = await getComposerAttachmentCount(composer);
+  text = await getComposerUserText(textbox);
+  
+  if (count > 0) {
+    throw new Error('Không clear được attachment cũ trong composer trước khi chạy job');
+  }
+  if (text.length > 0) {
+    await emit('GUARD', `composer còn text/placeholder sau clear, sẽ overwrite bằng prompt job: "${text.slice(0, 80)}"`);
+  }
+  
+  await emit('INFO', `composer cleared enough for next job`);
+}
+
+async function uploadReferenceToMediaLibrary(page, filePath, emit, workspaceId, jobId, slotIndex) {
+  await emit('INFO', `uploading reference slot=${slotIndex} file=${filePath}`);
+  const { composer } = await composerFor(page);
+  
+  const addButton = await visibleUnique(
+    composer.locator('button[aria-haspopup="dialog"], button[aria-label*="nghe nhìn"], button[aria-label*="media"]'),
+    'Add reference',
+  );
+  await observedClick(page, addButton, 'mở Reference picker', emit);
+  const uploadButton = await visibleUnique(
+    page
+      .getByRole('button')
+      .filter({ hasText: /Tải (?:nội dung nghe nhìn)? lên|Upload/i }),
+    'Upload reference',
+  );
+  const observation = await observeBeforeAction(uploadButton);
+  await assertNoUnexpectedUi(page, uploadButton);
+  await showActionIndicator(page, uploadButton, { action: 'upload', control: 'Upload', previewMs: 450 });
+
+  try {
+    const chooserPromise = page.waitForEvent('filechooser', { timeout: 8_000 });
+    await uploadButton.click();
+    const chooser = await chooserPromise;
+    await chooser.setFiles(filePath);
+  } finally {
+    await clearActionIndicator(page);
+  }
+  
+  await page.waitForTimeout(1500);
+  await emit('INFO', `uploaded reference slot=${slotIndex}`);
+}
+
+async function attachReferenceToPromptComposer(page, composer, expectedCount, emit, workspaceId, jobId, slotIndex) {
+  await emit('INFO', `attaching reference slot=${slotIndex} method=plus-picker`);
+  
+  const mediaLibrary = page.locator('div[role="dialog"]');
+  const firstThumbnail = mediaLibrary.locator('img, video').first();
+  await firstThumbnail.waitFor({ state: 'visible', timeout: 15_000 });
+  
+  await firstThumbnail.click();
+  const submitButton = page.locator('button:has-text("Thêm vào câu lệnh"), button:has-text("Add to prompt")');
+  if (await submitButton.isVisible().catch(() => false)) {
+    await submitButton.click();
+  } else {
+    await emit('INFO', `attaching reference slot=${slotIndex} method=drag-drop`);
+    const composerBox = await composer.boundingBox();
+    const thumbBox = await firstThumbnail.boundingBox();
+    if (composerBox && thumbBox) {
+      await page.mouse.move(thumbBox.x + thumbBox.width / 2, thumbBox.y + thumbBox.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(composerBox.x + composerBox.width / 2, composerBox.y + composerBox.height / 2, { steps: 5 });
+      await page.mouse.up();
+    }
+  }
+
+  await page.waitForTimeout(1000);
+  const afterCount = await getComposerAttachmentCount(composer);
+  if (afterCount < expectedCount) {
+    throw new Error('Không attach được ảnh vào câu lệnh');
+  }
+  
+  await page.keyboard.press('Escape').catch(() => {});
+  await emit('INFO', `reference attached slot=${slotIndex} count=${afterCount}/${expectedCount}`);
+}
+
 async function submitJob(
   page,
   settings,
@@ -362,42 +504,69 @@ async function submitJob(
   onJobUpdate,
   workspaceId
 ) {
+  const initialComposer = await composerFor(page);
+  await clearComposer(page, initialComposer.composer, emit, workspaceId, job.id);
+  
+  const references = Array.isArray(job.references) ? job.references : [];
+  let expectedCount = 0;
+
+  for (let i = 0; i < references.length; i++) {
+    const referenceUrl = references[i];
+    if (!referenceUrl) continue;
+    
+    await onJobUpdate(job, { progress: 'uploading_reference' });
+    const filePath = referenceFilePath(referenceUrl);
+    if (!filePath) throw new Error('Reference path is invalid.');
+    
+    await uploadReferenceToMediaLibrary(page, filePath, emit, workspaceId, job.id, i);
+    await onJobUpdate(job, { progress: 'reference_uploaded' });
+    
+    await onJobUpdate(job, { progress: 'attaching_reference' });
+    expectedCount += 1;
+    await attachReferenceToPromptComposer(page, initialComposer.composer, expectedCount, emit, workspaceId, job.id, i);
+    await onJobUpdate(job, { progress: 'reference_attached' });
+  }
+
+  await onJobUpdate(job, { progress: 'prompt_ready' });
   const { textbox, composer } = await composerFor(page);
+  await observedFill(
+    page,
+    textbox,
+    job.prompt,
+    `prompt ${job.code}`,
+    emit,
+  );
+  const currentPromptText = normalizePromptText(await getComposerUserText(initialComposer.textbox));
+  const expectedPrompt = normalizePromptText(job.prompt);
 
-  await onJobUpdate(job, { progress: 0, status: 'running' });
-
-  if (Array.isArray(job.references) && job.references.some(Boolean)) {
-    await emit('GUARD', 'Reference input đang tạm tắt; chạy prompt-only để ổn định runner.');
+  if (!currentPromptText.includes(expectedPrompt)) {
+    throw new Error(`Prompt verification failed after fill. Expected prompt not found. Current: "${currentPromptText.slice(0, 200)}"`);
   }
-
-  await observedFill(page, textbox, job.prompt, `prompt ${job.code}`, emit);
-
-  const currentPrompt = (await textbox.innerText()).replace(/\s+/g, ' ').trim();
-  const expectedPrompt = String(job.prompt || '').replace(/\s+/g, ' ').trim();
-
-  if (!currentPrompt.includes(expectedPrompt.slice(0, 80))) {
-    throw new Error('Prompt verification failed after fill.');
+  
+  const finalCount = await getComposerAttachmentCount(composer);
+  if (finalCount < expectedCount) {
+    throw new Error(`Prompt verification failed after fill. Expected ${expectedCount} attachments but got ${finalCount}.`);
   }
+  
+  await emit('SUCCESS', `Đã điền và xác minh prompt ${job.code}.`);
 
   const generateButton = await visibleUnique(
-    composer.locator('button:not([aria-haspopup]):has-text("arrow_forward")'),
+    composer.locator(
+      'button:not([aria-haspopup]):has-text("arrow_forward")',
+    ),
     'Generate',
   );
-
   if (!(await generateButton.isEnabled())) {
     throw new Error('Generate button is disabled after prompt fill.');
   }
-
   await observedClick(page, generateButton, 'Generate', emit);
   await emit('SUCCESS', `${job.code} đã gửi lệnh tạo sang Flow.`);
-
   const tiles = await waitForNewTiles(
     page,
     knownTileIds,
     expectedOutputCount(settings.count),
     emit,
   );
-
   return { tileIds: tiles.map((tile) => tile.id) };
 }
 

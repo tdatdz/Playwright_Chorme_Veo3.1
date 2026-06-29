@@ -7,5 +7,6 @@ artifacts/journals/
 OutPut/
 *.log
 .env
-.DS_Storeartifacts/
+.DS_Store
+artifacts/
 *.html

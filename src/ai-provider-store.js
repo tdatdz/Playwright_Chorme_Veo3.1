@@ -34,7 +34,7 @@ export async function saveProviders(data) {
 }
 
 function maskApiKey(key) {
-  if (!key) return '';
+  if (!key) return null;
   if (key.length <= 4) return '****';
   const prefix = key.startsWith('sk-') ? 'sk-' : '';
   const actualKey = key.startsWith('sk-') ? key.slice(3) : key;
@@ -48,10 +48,14 @@ export async function getMaskedProviders() {
     providers: data.providers.map(p => ({
       id: p.id,
       name: p.name,
-      type: p.type,
+      type: p.type || 'openai-compatible',
       baseUrl: p.baseUrl,
+      authMode: p.authMode || 'api_key',
       apiKeyMasked: maskApiKey(p.apiKey),
+      oauthMasked: maskApiKey(p.oauthToken),
       defaultModel: p.defaultModel,
+      lastTestStatus: p.lastTestStatus || 'untested',
+      lastTestedAt: p.lastTestedAt || null,
       createdAt: p.createdAt,
       updatedAt: p.updatedAt
     })),
@@ -64,15 +68,35 @@ export async function addOrUpdateProvider(provider) {
   const existingIndex = data.providers.findIndex(p => p.id === provider.id);
   
   if (existingIndex >= 0) {
+    const old = data.providers[existingIndex];
+    let newApiKey = provider.apiKey;
+    if (!newApiKey || newApiKey === maskApiKey(old.apiKey)) {
+      newApiKey = old.apiKey;
+    }
+    let newOauth = provider.oauthToken;
+    if (!newOauth || newOauth === maskApiKey(old.oauthToken)) {
+      newOauth = old.oauthToken;
+    }
+
     data.providers[existingIndex] = {
-      ...data.providers[existingIndex],
-      ...provider,
+      ...old,
+      name: provider.name || old.name,
+      baseUrl: provider.baseUrl || old.baseUrl,
+      authMode: provider.authMode || old.authMode,
+      apiKey: newApiKey,
+      oauthToken: newOauth,
+      defaultModel: provider.defaultModel || old.defaultModel,
+      lastTestStatus: provider.lastTestStatus || old.lastTestStatus,
+      lastTestedAt: provider.lastTestedAt || old.lastTestedAt,
       updatedAt: new Date().toISOString()
     };
   } else {
     data.providers.push({
       ...provider,
       id: provider.id || `provider_${Date.now()}`,
+      authMode: provider.authMode || 'api_key',
+      lastTestStatus: provider.lastTestStatus || 'untested',
+      lastTestedAt: provider.lastTestedAt || null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
@@ -93,6 +117,14 @@ export async function deleteProvider(id) {
     data.defaultProviderId = data.providers.length > 0 ? data.providers[0].id : null;
   }
   await saveProviders(data);
+}
+
+export async function setDefaultProvider(id) {
+  const data = await loadProviders();
+  if (data.providers.find(p => p.id === id)) {
+    data.defaultProviderId = id;
+    await saveProviders(data);
+  }
 }
 
 export async function getProviderById(id) {

@@ -7,7 +7,8 @@ import {
   getMaskedProviders,
   addOrUpdateProvider,
   deleteProvider,
-  getProviderById
+  getProviderById,
+  setDefaultProvider
 } from './ai-provider-store.js';
 import { authenticate } from './auth.js';
 import {
@@ -1082,6 +1083,17 @@ async function api(request, response, pathname) {
     return;
   }
 
+  if (request.method === 'POST' && pathname === '/api/ai/providers/default') {
+    const body = await parseJsonBody(request);
+    if (body.providerId) {
+      await setDefaultProvider(body.providerId);
+      sendJson(response, 200, { success: true });
+    } else {
+      sendJson(response, 400, { error: 'Missing providerId' });
+    }
+    return;
+  }
+
   if (request.method === 'DELETE' && pathname.startsWith('/api/ai/providers/')) {
     const id = pathname.substring('/api/ai/providers/'.length);
     await deleteProvider(id);
@@ -1089,10 +1101,28 @@ async function api(request, response, pathname) {
     return;
   }
 
+  function buildAuthHeaders(providerLike) {
+    if (providerLike.authMode === 'no_auth') return {};
+    if (providerLike.authMode === 'oauth') {
+      return { Authorization: `Bearer ${providerLike.oauthToken || ''}` };
+    }
+    return { Authorization: `Bearer ${providerLike.apiKey || ''}` };
+  }
+
   if (request.method === 'POST' && pathname === '/api/ai/test') {
     const body = await parseJsonBody(request);
-    let baseUrl = String(body.baseUrl || '').trim();
-    const apiKey = String(body.apiKey || '').trim();
+    let targetProvider = body;
+    
+    if (body.providerId) {
+      const stored = await getProviderById(body.providerId);
+      if (!stored) {
+        sendJson(response, 404, { error: 'Provider not found' });
+        return;
+      }
+      targetProvider = stored;
+    }
+    
+    let baseUrl = String(targetProvider.baseUrl || '').trim();
     if (!baseUrl) {
       sendJson(response, 400, { error: 'Base URL không được để trống.' });
       return;
@@ -1105,7 +1135,7 @@ async function api(request, response, pathname) {
     try {
       const res = await fetch(`${baseUrl}/models`, {
         headers: {
-          'Authorization': `Bearer ${apiKey}`,
+          ...buildAuthHeaders(targetProvider),
           'Content-Type': 'application/json'
         },
         signal: abort.signal
@@ -1113,30 +1143,39 @@ async function api(request, response, pathname) {
       clearTimeout(timeout);
       
       if (res.status === 401 || res.status === 403) {
-        sendJson(response, 401, { error: 'API key sai hoặc hết hạn.' });
+        if (body.providerId) await addOrUpdateProvider({ id: targetProvider.id, lastTestStatus: 'error', lastTestedAt: new Date().toISOString() });
+        sendJson(response, 401, { error: 'API key sai hoặc provider từ chối (401/403).' });
         return;
       }
       if (res.status === 404) {
+        if (body.providerId) await addOrUpdateProvider({ id: targetProvider.id, lastTestStatus: 'error', lastTestedAt: new Date().toISOString() });
         sendJson(response, 404, { error: 'Base URL có vẻ sai. Với 9Router hãy dùng http://127.0.0.1:20128/v1' });
         return;
       }
       if (!res.ok) {
+        if (body.providerId) await addOrUpdateProvider({ id: targetProvider.id, lastTestStatus: 'error', lastTestedAt: new Date().toISOString() });
         sendJson(response, res.status, { error: `Lỗi kết nối HTTP ${res.status}: ${res.statusText}` });
         return;
       }
       
       const data = await res.json();
       if (!data || !data.data || data.data.length === 0) {
-        sendJson(response, 200, { models: [], error: 'Kết nối được nhưng chưa thấy model. Hãy kiểm tra provider trong 9Router.' });
+        if (body.providerId) await addOrUpdateProvider({ id: targetProvider.id, lastTestStatus: 'error', lastTestedAt: new Date().toISOString() });
+        sendJson(response, 200, { models: [], error: 'Kết nối được nhưng chưa thấy model. Hãy kiểm tra provider.' });
         return;
       }
+      
+      if (body.providerId) await addOrUpdateProvider({ id: targetProvider.id, lastTestStatus: 'connected', lastTestedAt: new Date().toISOString() });
       sendJson(response, 200, { models: data.data.map(m => m.id) });
     } catch (error) {
       clearTimeout(timeout);
+      if (body.providerId) await addOrUpdateProvider({ id: targetProvider.id, lastTestStatus: 'error', lastTestedAt: new Date().toISOString() });
       if (error.name === 'AbortError') {
-        sendJson(response, 504, { error: 'Model phản hồi quá lâu. Thử model khác hoặc kiểm tra mạng.' });
+        sendJson(response, 504, { error: 'Kết nối quá lâu (Timeout 15s). Kiểm tra mạng hoặc local server.' });
       } else if (error.message.includes('ECONNREFUSED') || error.message.includes('fetch failed')) {
-        sendJson(response, 502, { error: 'Không thấy 9Router hoặc server đang chạy. Hãy mở 9Router trước.' });
+        sendJson(response, 502, { error: 'Không kết nối được, hãy kiểm tra 9Router/local server đã mở chưa.' });
+      } else if (error instanceof SyntaxError) {
+        sendJson(response, 500, { error: 'Provider trả về phản hồi không hợp lệ (Không phải JSON).' });
       } else {
         sendJson(response, 500, { error: `Lỗi kỹ thuật: ${error.message}` });
       }
@@ -1160,14 +1199,14 @@ async function api(request, response, pathname) {
     
     try {
       const messages = [
-        { role: 'system', content: 'You improve image generation prompts. Output ONLY the improved prompt, no prefix or explanation.' },
+        { role: 'system', content: 'You improve image generation prompts. Return only the improved prompt.' },
         { role: 'user', content: String(body.input) }
       ];
       
       const res = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${provider.apiKey}`,
+          ...buildAuthHeaders(provider),
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -1186,6 +1225,7 @@ async function api(request, response, pathname) {
           const errBody = await res.json();
           if (errBody.error && errBody.error.message) errStr = errBody.error.message;
         } catch(e) {}
+        // DO NOT update lastTestStatus on generation failure, per user requirement
         sendJson(response, res.status, { error: `AI Error (${res.status}): ${errStr}` });
         return;
       }

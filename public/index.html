@@ -467,38 +467,52 @@
     <div id="aiProviderModal" class="image-modal" hidden>
       <button id="closeAiProviderModal" class="modal-close" aria-label="Đóng">×</button>
       <div class="modal-content" style="background: #1e1e2e; padding: 24px; border-radius: 8px; max-width: 600px; width: 100%; border: 1px solid #333; color: #fff;">
-        <h2 style="margin-top: 0; margin-bottom: 20px; font-weight: 500;">Kết nối Model AI</h2>
+        <h2 style="margin-top: 0; margin-bottom: 8px; font-weight: 500;">AI Provider Center</h2>
+        <p style="margin-top: 0; margin-bottom: 24px; color: #a1a1aa; font-size: 14px;">Quản lý model AI dùng để tối ưu prompt, dịch prompt, tạo scene.</p>
         
         <div id="aiProviderListState">
           <div id="aiProviderEmptyState" style="text-align: center; padding: 40px 0;">
-            <p style="color: #a1a1aa; margin-bottom: 24px;">Bạn chưa kết nối AI model.</p>
+            <p style="color: #a1a1aa; margin-bottom: 24px;">Bạn chưa kết nối AI model nào.<br>Kết nối 9Router Local hoặc Custom OpenAI-Compatible để bắt đầu.</p>
             <div style="display: flex; gap: 12px; justify-content: center;">
-              <button id="add9RouterBtn" class="btn primary">Kết nối 9Router Local</button>
-              <button id="addCustomAIBtn" class="btn">Thêm endpoint custom</button>
-            </div>
-            <div style="margin-top: 24px; text-align: left; background: #27272a; padding: 16px; border-radius: 6px; font-size: 13px; color: #d4d4d8;">
-              <strong>Hướng dẫn 9Router:</strong>
-              <ol style="margin-top: 8px; margin-bottom: 0; padding-left: 20px;">
-                <li>Mở 9Router</li>
-                <li>Copy API key trong dashboard</li>
-                <li>Bấm "Kết nối" và dán key vào đây</li>
-                <li>Bấm Kiểm tra kết nối</li>
-              </ol>
+              <button class="btn primary" onclick="startAiProviderWizard('9router')">Kết nối 9Router Local</button>
+              <button class="btn" onclick="startAiProviderWizard('custom')">Kết nối Custom Endpoint</button>
             </div>
           </div>
           
           <div id="aiProviderListContainer" hidden>
             <div id="aiProviderCards"></div>
-            <div style="margin-top: 20px; display: flex; gap: 12px;">
-              <button id="addMore9RouterBtn" class="btn primary">Thêm 9Router</button>
-              <button id="addMoreCustomAIBtn" class="btn">Thêm Custom</button>
+            <div style="margin-top: 20px; display: flex; justify-content: center;">
+              <button id="addConnectionBtn" class="btn primary" style="width: 100%;">+ Thêm kết nối model</button>
             </div>
+          </div>
+        </div>
+
+        <div id="aiProviderAddStep1State" hidden>
+          <div class="wizard-header" style="margin-bottom: 20px;">
+            <strong id="wizardTitle1">Bước 1: Chọn loại kết nối</strong>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <button class="btn" style="text-align: left; padding: 12px;" onclick="startAiProviderWizardStep2('9router')">
+              <strong>9Router Local</strong><br>
+              <span style="font-size: 12px; color: #a1a1aa;">Dùng cổng local 127.0.0.1:20128</span>
+            </button>
+            <button class="btn" style="text-align: left; padding: 12px;" onclick="startAiProviderWizardStep2('custom_api')">
+              <strong>Custom OpenAI-Compatible (API Key)</strong><br>
+              <span style="font-size: 12px; color: #a1a1aa;">Dành cho OpenRouter, Groq, Together...</span>
+            </button>
+            <button class="btn" style="text-align: left; padding: 12px;" onclick="startAiProviderWizardStep2('custom_no_auth')">
+              <strong>No Auth Local Endpoint</strong><br>
+              <span style="font-size: 12px; color: #a1a1aa;">Dành cho LM Studio, Ollama không cần auth</span>
+            </button>
+          </div>
+          <div style="margin-top: 16px;">
+            <button class="btn" onclick="cancelAiWizard()">Quay lại</button>
           </div>
         </div>
 
         <div id="aiProviderWizardState" hidden>
           <div class="wizard-header" style="margin-bottom: 20px;">
-            <strong id="wizardTitle">Bước 2: Dán API Key</strong>
+            <strong id="wizardTitle">Bước 2: Cấu hình kết nối</strong>
           </div>
           
           <div style="display: flex; flex-direction: column; gap: 16px;">
@@ -508,27 +522,28 @@
             </div>
             
             <div class="input-group">
-              <label>API Key <span style="font-size: 11px; color: #a1a1aa; margin-left: 8px;">Key chỉ lưu trên máy bạn, không gửi lên GitHub.</span></label>
+              <label>Endpoint URL</label>
+              <input type="text" id="aiProviderBaseUrl" class="form-input" placeholder="http://127.0.0.1:20128/v1" />
+            </div>
+
+            <div class="input-group">
+              <label>Authentication Mode</label>
+              <div style="display: flex; gap: 16px; margin-top: 4px;">
+                <label style="cursor: pointer; display: flex; align-items: center; gap: 4px; font-weight: normal; color: #fff;"><input type="radio" name="aiAuthMode" value="api_key"> API Key</label>
+                <label style="cursor: pointer; display: flex; align-items: center; gap: 4px; font-weight: normal; color: #fff;"><input type="radio" name="aiAuthMode" value="oauth"> OAuth Token</label>
+                <label style="cursor: pointer; display: flex; align-items: center; gap: 4px; font-weight: normal; color: #fff;"><input type="radio" name="aiAuthMode" value="no_auth"> No Auth</label>
+              </div>
+            </div>
+            
+            <div class="input-group" id="aiProviderKeyGroup">
+              <label id="aiProviderKeyLabel">API Key</label>
               <div style="display: flex; gap: 8px;">
-                <input type="password" id="aiProviderKey" class="form-input" placeholder="Nhập API Key" style="flex: 1;" />
+                <input type="password" id="aiProviderKey" class="form-input" placeholder="Nhập Key" style="flex: 1;" />
                 <button type="button" id="toggleAiKeyVisibility" class="btn" style="min-width: 40px; padding: 0;">👁</button>
                 <button type="button" id="pasteAiKeyBtn" class="btn">Dán</button>
               </div>
+              <span style="font-size: 11px; color: #a1a1aa; margin-top: 4px;">Chỉ lưu trên máy bạn. Bỏ trống nếu muốn giữ nguyên key cũ khi sửa.</span>
             </div>
-
-            <details style="background: #27272a; padding: 12px; border-radius: 6px; border: 1px solid #3f3f46;">
-              <summary style="cursor: pointer; color: #a1a1aa; font-size: 13px; font-weight: 500;">Cài đặt nâng cao</summary>
-              <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 12px;">
-                <div class="input-group">
-                  <label>Type</label>
-                  <input type="text" id="aiProviderType" class="form-input" value="openai-compatible" disabled />
-                </div>
-                <div class="input-group">
-                  <label>Base URL <span style="font-size: 11px; color: #a1a1aa;">Ví dụ: http://127.0.0.1:20128/v1</span></label>
-                  <input type="text" id="aiProviderBaseUrl" class="form-input" placeholder="http://127.0.0.1:20128/v1" />
-                </div>
-              </div>
-            </details>
 
             <div id="aiProviderErrorBox" hidden style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); padding: 12px; border-radius: 6px; color: #fca5a5; font-size: 13px;">
               <span id="aiProviderErrorText"></span>
@@ -537,25 +552,27 @@
             </div>
 
             <div style="display: flex; gap: 12px; margin-top: 8px;">
-              <button id="testAiConnectionBtn" class="btn primary" style="flex: 1;">Kiểm tra kết nối</button>
-              <button id="cancelAiWizardBtn" class="btn">Hủy</button>
+              <button id="testAiConnectionBtn" class="btn primary" style="flex: 1;">Kiểm tra & Tiếp tục</button>
+              <button class="btn" onclick="cancelAiWizard()">Hủy</button>
             </div>
           </div>
         </div>
 
         <div id="aiProviderModelSelectState" hidden>
           <div class="wizard-header" style="margin-bottom: 20px;">
-            <strong style="color: #4ade80;">✅ Đã kết nối thành công</strong>
+            <strong style="color: #4ade80;">✅ Test kết nối thành công</strong>
             <div style="margin-top: 8px; font-size: 14px;">Bước 3: Chọn model dùng mặc định</div>
           </div>
           
           <div class="input-group">
             <label>Model mặc định</label>
-            <select id="aiProviderModelSelect" class="form-input"></select>
+            <input type="text" id="aiProviderModelSearch" class="form-input" placeholder="Tìm kiếm model..." style="margin-bottom: 8px;" />
+            <select id="aiProviderModelSelect" class="form-input" size="8" style="overflow-y: auto; background: #18181b; padding: 8px;"></select>
           </div>
           
           <div style="display: flex; gap: 12px; margin-top: 24px;">
-            <button id="finishAiWizardBtn" class="btn primary" style="flex: 1;">Hoàn tất</button>
+            <button id="finishAiWizardBtn" class="btn primary" style="flex: 1;">Save Connection</button>
+            <button class="btn" onclick="cancelAiWizard()">Hủy</button>
           </div>
         </div>
 

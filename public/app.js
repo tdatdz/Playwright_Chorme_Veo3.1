@@ -1,4 +1,38 @@
 const elements = {
+  openAiProviderBtn: document.querySelector('#openAiProviderBtn'),
+  aiProviderModal: document.querySelector('#aiProviderModal'),
+  closeAiProviderModal: document.querySelector('#closeAiProviderModal'),
+  aiProviderListState: document.querySelector('#aiProviderListState'),
+  aiProviderEmptyState: document.querySelector('#aiProviderEmptyState'),
+  aiProviderListContainer: document.querySelector('#aiProviderListContainer'),
+  aiProviderCards: document.querySelector('#aiProviderCards'),
+  aiProviderWizardState: document.querySelector('#aiProviderWizardState'),
+  wizardTitle: document.querySelector('#wizardTitle'),
+  aiProviderName: document.querySelector('#aiProviderName'),
+  aiProviderKey: document.querySelector('#aiProviderKey'),
+  toggleAiKeyVisibility: document.querySelector('#toggleAiKeyVisibility'),
+  pasteAiKeyBtn: document.querySelector('#pasteAiKeyBtn'),
+  aiProviderType: document.querySelector('#aiProviderType'),
+  aiProviderBaseUrl: document.querySelector('#aiProviderBaseUrl'),
+  aiProviderErrorBox: document.querySelector('#aiProviderErrorBox'),
+  aiProviderErrorText: document.querySelector('#aiProviderErrorText'),
+  showAiProviderTechError: document.querySelector('#showAiProviderTechError'),
+  aiProviderTechErrorText: document.querySelector('#aiProviderTechErrorText'),
+  testAiConnectionBtn: document.querySelector('#testAiConnectionBtn'),
+  cancelAiWizardBtn: document.querySelector('#cancelAiWizardBtn'),
+  aiProviderModelSelectState: document.querySelector('#aiProviderModelSelectState'),
+  aiProviderModelSelect: document.querySelector('#aiProviderModelSelect'),
+  finishAiWizardBtn: document.querySelector('#finishAiWizardBtn'),
+  add9RouterBtn: document.querySelector('#add9RouterBtn'),
+  addCustomAIBtn: document.querySelector('#addCustomAIBtn'),
+  addMore9RouterBtn: document.querySelector('#addMore9RouterBtn'),
+  addMoreCustomAIBtn: document.querySelector('#addMoreCustomAIBtn'),
+  aiPreviewModal: document.querySelector('#aiPreviewModal'),
+  aiPreviewOriginal: document.querySelector('#aiPreviewOriginal'),
+  aiPreviewProposed: document.querySelector('#aiPreviewProposed'),
+  cancelAiPreviewBtn: document.querySelector('#cancelAiPreviewBtn'),
+  copyAiPreviewBtn: document.querySelector('#copyAiPreviewBtn'),
+  applyAiPreviewBtn: document.querySelector('#applyAiPreviewBtn'),
   topTabs: [...document.querySelectorAll('.top-tab[data-view]')],
   views: [...document.querySelectorAll('[data-view-panel]')],
   chromeStatus: document.querySelector('#chromeStatus'),
@@ -496,7 +530,13 @@ function renderJobs() {
             }">${escapeHtml(job.prompt)}</textarea>
             <div class="row-tools">
               <button class="mini-btn job-run-btn" data-action="run-job" ${isJobLocked(job) ? 'disabled' : ''}>▶ Run</button>
-              <button class="mini-btn cyan copy-prompt-btn" data-action="copy-prompt">📋 Copy Prompt</button>
+              <button class="mini-btn cyan copy-prompt-btn" data-action="copy-prompt">📋 Copy</button>
+              <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; margin-top: 4px;">
+                ${window.aiProviders?.defaultProviderId ? 
+                  `<span style="font-size: 10px; color: #a1a1aa;">Using: ${escapeHtml(window.aiProviders.providers.find(p => p.id === window.aiProviders.defaultProviderId)?.name || 'Unknown')} · ${escapeHtml(window.aiProviders.providers.find(p => p.id === window.aiProviders.defaultProviderId)?.defaultModel || 'Unknown')}</span>` : ''
+                }
+                <button class="mini-btn purple" data-action="ai-optimize" title="${!window.aiProviders?.defaultProviderId ? 'Bạn cần kết nối AI model trước.' : 'AI Tối ưu Prompt'}" ${!window.aiProviders?.defaultProviderId ? 'disabled' : ''}>✨ AI Optimize</button>
+              </div>
             </div>
           </td>
           <td>
@@ -1795,6 +1835,7 @@ setInterval(refreshStatus, 3_000);
 window.aiProviders = { providers: [], defaultProviderId: null };
 let currentAiWizardConfig = null;
 let currentAiOptimizeJob = null;
+let editingProviderId = null;
 
 async function loadAiProviders() {
   try {
@@ -1807,6 +1848,14 @@ async function loadAiProviders() {
   }
 }
 
+function getProviderStatusBadge(provider) {
+  switch (provider.lastTestStatus) {
+    case 'connected': return '<span style="background: rgba(74, 222, 128, 0.15); color: #4ade80; padding: 2px 8px; border-radius: 4px; font-size: 12px;">Connected</span>';
+    case 'error': return '<span style="background: rgba(239, 68, 68, 0.15); color: #ef4444; padding: 2px 8px; border-radius: 4px; font-size: 12px;">Error</span>';
+    default: return '<span style="background: rgba(161, 161, 170, 0.15); color: #a1a1aa; padding: 2px 8px; border-radius: 4px; font-size: 12px;">Not tested</span>';
+  }
+}
+
 function renderAiProviderList() {
   const list = window.aiProviders.providers;
   if (!list || list.length === 0) {
@@ -1815,19 +1864,31 @@ function renderAiProviderList() {
   } else {
     elements.aiProviderEmptyState.hidden = true;
     elements.aiProviderListContainer.hidden = false;
-    elements.aiProviderCards.innerHTML = list.map(p => `
-      <div style="background: #27272a; padding: 16px; border-radius: 8px; margin-bottom: 12px; border: 1px solid #3f3f46;">
+    elements.aiProviderCards.innerHTML = list.map(p => {
+      const isDefault = p.id === window.aiProviders.defaultProviderId;
+      const keyDisplay = p.authMode === 'api_key' ? p.apiKeyMasked : (p.authMode === 'oauth' ? p.oauthMasked : 'N/A');
+      return `
+      <div style="background: #27272a; padding: 16px; border-radius: 8px; margin-bottom: 12px; border: ${isDefault ? '1px solid #4ade80' : '1px solid #3f3f46'}; position: relative;">
+        ${isDefault ? '<div style="position: absolute; top: -10px; right: 10px; background: #4ade80; color: #000; font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 10px;">DEFAULT</div>' : ''}
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
           <h3 style="margin: 0; font-size: 16px; color: #fff;">${escapeHtml(p.name)}</h3>
-          <span style="background: rgba(74, 222, 128, 0.15); color: #4ade80; padding: 2px 8px; border-radius: 4px; font-size: 12px;">Đã kết nối</span>
+          ${getProviderStatusBadge(p)}
         </div>
-        <div style="font-size: 13px; color: #a1a1aa; margin-bottom: 4px;">Model mặc định: <strong style="color: #fff;">${escapeHtml(p.defaultModel)}</strong></div>
-        <div style="font-size: 13px; color: #a1a1aa; margin-bottom: 12px;">API Key: <code style="background: #18181b; padding: 2px 4px; border-radius: 4px;">${escapeHtml(p.apiKeyMasked)}</code></div>
-        <div style="display: flex; gap: 8px;">
+        <div style="display: grid; grid-template-columns: 80px 1fr; gap: 4px; font-size: 13px; color: #a1a1aa; margin-bottom: 12px;">
+          <div>Model:</div><div><strong style="color: #fff;">${escapeHtml(p.defaultModel || 'N/A')}</strong></div>
+          <div>Endpoint:</div><div style="word-break: break-all;">${escapeHtml(p.baseUrl)}</div>
+          <div>Auth Mode:</div><div>${escapeHtml(p.authMode)}</div>
+          <div>Token:</div><div><code style="background: #18181b; padding: 2px 4px; border-radius: 4px;">${escapeHtml(keyDisplay || '')}</code></div>
+          <div>Tested:</div><div>${p.lastTestedAt ? new Date(p.lastTestedAt).toLocaleString() : 'N/A'}</div>
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button class="btn" onclick="testSavedProvider('${p.id}')">Test lại</button>
+          ${!isDefault ? `<button class="btn primary" onclick="setDefaultAiProvider('${p.id}')">Set Default</button>` : ''}
+          <button class="btn" onclick="editAiProvider('${p.id}')">Sửa</button>
           <button class="btn" onclick="deleteAiProvider('${p.id}')">Xóa</button>
         </div>
       </div>
-    `).join('');
+    `}).join('');
   }
 }
 
@@ -1836,30 +1897,126 @@ window.deleteAiProvider = async function(id) {
   await fetch(`/api/ai/providers/${id}`, { method: 'DELETE' });
   await loadAiProviders();
   renderAiProviderList();
-  renderJobs(); // to re-enable/disable buttons
+  renderJobs();
 };
 
-function openAiWizard(type) {
+window.setDefaultAiProvider = async function(id) {
+  await fetch('/api/ai/providers/default', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ providerId: id })
+  });
+  await loadAiProviders();
+  renderAiProviderList();
+  renderJobs();
+};
+
+window.testSavedProvider = async function(id) {
+  try {
+    const res = await fetch('/api/ai/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ providerId: id })
+    });
+    const data = await res.json();
+    if (!res.ok) alert(data.error || 'Test failed');
+    else alert('Connected successfully. Found ' + data.models?.length + ' models.');
+  } catch (e) {
+    alert('Error testing connection: ' + e.message);
+  }
+  await loadAiProviders();
+  renderAiProviderList();
+};
+
+window.startAiProviderWizard = function(type) {
   elements.aiProviderListState.hidden = true;
   elements.aiProviderModelSelectState.hidden = true;
+  elements.aiProviderAddStep1State.hidden = false;
+  elements.aiProviderWizardState.hidden = true;
+  editingProviderId = null;
+  currentAiWizardConfig = null;
+};
+
+window.startAiProviderWizardStep2 = function(type) {
+  elements.aiProviderAddStep1State.hidden = true;
   elements.aiProviderWizardState.hidden = false;
-  
   elements.aiProviderErrorBox.hidden = true;
   elements.aiProviderTechErrorText.hidden = true;
-  
   elements.aiProviderKey.value = '';
+  document.querySelector('#aiProviderKeyLabel').textContent = 'API Key / Token';
   
   if (type === '9router') {
     elements.aiProviderName.value = '9Router Local';
     elements.aiProviderBaseUrl.value = 'http://127.0.0.1:20128/v1';
+    document.querySelector('input[name="aiAuthMode"][value="api_key"]').checked = true;
+  } else if (type === 'custom_no_auth') {
+    elements.aiProviderName.value = 'Local AI (No Auth)';
+    elements.aiProviderBaseUrl.value = 'http://127.0.0.1:11434/v1';
+    document.querySelector('input[name="aiAuthMode"][value="no_auth"]').checked = true;
   } else {
     elements.aiProviderName.value = 'Custom Provider';
     elements.aiProviderBaseUrl.value = '';
+    document.querySelector('input[name="aiAuthMode"][value="api_key"]').checked = true;
+  }
+  
+  updateAiAuthModeUI();
+};
+
+window.editAiProvider = function(id) {
+  const p = window.aiProviders.providers.find(x => x.id === id);
+  if (!p) return;
+  
+  editingProviderId = id;
+  elements.aiProviderListState.hidden = true;
+  elements.aiProviderModelSelectState.hidden = true;
+  elements.aiProviderAddStep1State.hidden = true;
+  elements.aiProviderWizardState.hidden = false;
+  elements.aiProviderErrorBox.hidden = true;
+  elements.aiProviderTechErrorText.hidden = true;
+  
+  elements.aiProviderName.value = p.name;
+  elements.aiProviderBaseUrl.value = p.baseUrl;
+  document.querySelector(`input[name="aiAuthMode"][value="${p.authMode}"]`).checked = true;
+  
+  if (p.authMode === 'api_key') elements.aiProviderKey.value = p.apiKeyMasked || '';
+  else if (p.authMode === 'oauth') elements.aiProviderKey.value = p.oauthMasked || '';
+  else elements.aiProviderKey.value = '';
+  
+  updateAiAuthModeUI();
+};
+
+function updateAiAuthModeUI() {
+  const mode = document.querySelector('input[name="aiAuthMode"]:checked').value;
+  const group = document.querySelector('#aiProviderKeyGroup');
+  if (mode === 'no_auth') {
+    group.style.opacity = '0.5';
+    elements.aiProviderKey.disabled = true;
+  } else {
+    group.style.opacity = '1';
+    elements.aiProviderKey.disabled = false;
   }
 }
 
+document.querySelectorAll('input[name="aiAuthMode"]').forEach(radio => {
+  radio.addEventListener('change', updateAiAuthModeUI);
+});
+
+window.cancelAiWizard = function() {
+  elements.aiProviderAddStep1State.hidden = true;
+  elements.aiProviderWizardState.hidden = true;
+  elements.aiProviderModelSelectState.hidden = true;
+  elements.aiProviderListState.hidden = false;
+  editingProviderId = null;
+  currentAiWizardConfig = null;
+};
+
+document.querySelector('#addConnectionBtn')?.addEventListener('click', () => {
+  startAiProviderWizard('9router');
+});
+
 elements.openAiProviderBtn?.addEventListener('click', async () => {
   await loadAiProviders();
+  elements.aiProviderAddStep1State.hidden = true;
   elements.aiProviderWizardState.hidden = true;
   elements.aiProviderModelSelectState.hidden = true;
   elements.aiProviderListState.hidden = false;
@@ -1869,14 +2026,6 @@ elements.openAiProviderBtn?.addEventListener('click', async () => {
 
 elements.closeAiProviderModal?.addEventListener('click', () => {
   elements.aiProviderModal.hidden = true;
-});
-
-[elements.add9RouterBtn, elements.addMore9RouterBtn].forEach(btn => btn?.addEventListener('click', () => openAiWizard('9router')));
-[elements.addCustomAIBtn, elements.addMoreCustomAIBtn].forEach(btn => btn?.addEventListener('click', () => openAiWizard('custom')));
-
-elements.cancelAiWizardBtn?.addEventListener('click', () => {
-  elements.aiProviderWizardState.hidden = true;
-  elements.aiProviderListState.hidden = false;
 });
 
 elements.toggleAiKeyVisibility?.addEventListener('click', () => {
@@ -1903,24 +2052,49 @@ elements.showAiProviderTechError?.addEventListener('click', () => {
 });
 
 elements.testAiConnectionBtn?.addEventListener('click', async () => {
-  const baseUrl = elements.aiProviderBaseUrl.value.trim();
-  const apiKey = elements.aiProviderKey.value.trim();
+  let baseUrl = elements.aiProviderBaseUrl.value.trim();
+  const rawKey = elements.aiProviderKey.value.trim();
   const name = elements.aiProviderName.value.trim();
+  const authMode = document.querySelector('input[name="aiAuthMode"]:checked').value;
   
   if (!baseUrl) {
     alert('Vui lòng nhập Base URL');
     return;
   }
   
+  if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+    alert('Base URL phải bắt đầu bằng http:// hoặc https://');
+    return;
+  }
+  if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+  if (!baseUrl.endsWith('/v1')) {
+    if (confirm('Base URL thường kết thúc bằng /v1. Bạn có muốn tự động thêm /v1 không?')) {
+      baseUrl += '/v1';
+      elements.aiProviderBaseUrl.value = baseUrl;
+    }
+  }
+  
   elements.testAiConnectionBtn.disabled = true;
   elements.testAiConnectionBtn.textContent = 'Đang kiểm tra...';
   elements.aiProviderErrorBox.hidden = true;
+  
+  let payload = { baseUrl, authMode };
+  if (editingProviderId) {
+    payload.providerId = editingProviderId;
+    // Check if key was changed
+    const p = window.aiProviders.providers.find(x => x.id === editingProviderId);
+    if (authMode === 'api_key' && rawKey && rawKey !== p.apiKeyMasked) payload.apiKey = rawKey;
+    if (authMode === 'oauth' && rawKey && rawKey !== p.oauthMasked) payload.oauthToken = rawKey;
+  } else {
+    if (authMode === 'api_key') payload.apiKey = rawKey;
+    if (authMode === 'oauth') payload.oauthToken = rawKey;
+  }
   
   try {
     const res = await fetch('/api/ai/test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ baseUrl, apiKey })
+      body: JSON.stringify(payload)
     });
     const data = await res.json();
     
@@ -1929,11 +2103,14 @@ elements.testAiConnectionBtn?.addEventListener('click', async () => {
       elements.aiProviderErrorText.textContent = data.error || 'Lỗi không xác định';
       elements.aiProviderTechErrorText.textContent = JSON.stringify(data, null, 2);
     } else {
-      currentAiWizardConfig = { baseUrl, apiKey, name };
+      currentAiWizardConfig = payload;
+      currentAiWizardConfig.name = name;
       elements.aiProviderWizardState.hidden = true;
       elements.aiProviderModelSelectState.hidden = false;
       
-      elements.aiProviderModelSelect.innerHTML = data.models.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+      const oldModel = editingProviderId ? window.aiProviders.providers.find(x => x.id === editingProviderId)?.defaultModel : null;
+      
+      elements.aiProviderModelSelect.innerHTML = data.models.map(m => `<option value="${escapeHtml(m)}"${m === oldModel ? ' selected' : ''}>${escapeHtml(m)} ${m === oldModel ? '[Default]' : ''}</option>`).join('');
     }
   } catch (e) {
     elements.aiProviderErrorBox.hidden = false;
@@ -1941,8 +2118,16 @@ elements.testAiConnectionBtn?.addEventListener('click', async () => {
     elements.aiProviderTechErrorText.textContent = e.message;
   } finally {
     elements.testAiConnectionBtn.disabled = false;
-    elements.testAiConnectionBtn.textContent = 'Kiểm tra kết nối';
+    elements.testAiConnectionBtn.textContent = 'Kiểm tra & Tiếp tục';
   }
+});
+
+// Search models
+document.querySelector('#aiProviderModelSearch')?.addEventListener('input', (e) => {
+  const term = e.target.value.toLowerCase();
+  Array.from(elements.aiProviderModelSelect.options).forEach(opt => {
+    opt.hidden = !opt.value.toLowerCase().includes(term);
+  });
 });
 
 elements.finishAiWizardBtn?.addEventListener('click', async () => {
@@ -1958,14 +2143,12 @@ elements.finishAiWizardBtn?.addEventListener('click', async () => {
     });
     if (res.ok) {
       await loadAiProviders();
-      elements.aiProviderModelSelectState.hidden = true;
-      elements.aiProviderListState.hidden = false;
-      renderAiProviderList();
+      cancelAiWizard();
       renderJobs(); // update buttons
     }
   } finally {
     elements.finishAiWizardBtn.disabled = false;
-    elements.finishAiWizardBtn.textContent = 'Hoàn tất';
+    elements.finishAiWizardBtn.textContent = 'Save Connection';
   }
 });
 
@@ -1978,7 +2161,7 @@ elements.batchRows?.addEventListener('click', async (event) => {
   if (!job) return;
   
   if (!window.aiProviders?.defaultProviderId) {
-    alert('Bạn chưa cấu hình AI Provider. Vui lòng vào "AI Provider Center".');
+    alert('Bạn cần kết nối AI model trước.');
     return;
   }
   

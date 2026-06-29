@@ -306,6 +306,11 @@ async function attachReference(page, referenceUrl, emit) {
   await emit('SUCCESS', 'Reference đã xuất hiện trong prompt composer.');
 }
 
+async function snapshotKnownTileIds(page) {
+  const tiles = await mediaTiles(page);
+  return new Set(tiles.map((tile) => tile.id).filter(Boolean));
+}
+
 class SubmittedButUntrackedError extends Error {
   constructor(message) {
     super(message);
@@ -733,17 +738,21 @@ async function runReferenceJob(page, settings, job, knownTileIds, emit, onJobUpd
     throw new Error('Generate button is disabled after prompt fill.');
   }
 
+  const preGenerateKnownTileIds = await snapshotKnownTileIds(page);
+  await emit('OBSERVE', `Pre-generate baseline: ${preGenerateKnownTileIds.size} known tiles.`);
+
   await onJobUpdate(job, {
     status: 'running',
     progress: 'generating',
     lastProgressAt: new Date().toISOString(),
   });
+  
   await observedClick(page, generateButton, 'Generate', emit);
   await emit('SUCCESS', `${job.code} đã gửi lệnh tạo sang Flow.`);
 
   const tiles = await waitForNewTiles(
     page,
-    knownTileIds,
+    preGenerateKnownTileIds,
     expectedOutputCount(settings.count),
     emit,
   );

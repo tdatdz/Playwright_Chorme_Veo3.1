@@ -10,6 +10,9 @@ import {
   getProviderById,
   setDefaultProvider
 } from './ai-provider-store.js';
+import { getProviderCatalog } from './ai-provider-catalog.js';
+import { adapters } from './ai-provider-adapters.js';
+import { startOAuthFlow, handleOAuthCallback, getOAuthStatus, completeOAuthManual } from './ai-provider-oauth.js';
 import { authenticate } from './auth.js';
 import {
   createBatchWorkspace,
@@ -1070,6 +1073,121 @@ async function api(request, response, pathname) {
   }
 
   
+  if (request.method === 'POST' && pathname === '/api/ai/oauth/start') {
+    try {
+      let body = await readJson(request);
+      if (body.mode === 'preset') {
+         const catalog = await getProviderCatalog();
+         let item = null;
+         for (const cat of Object.values(catalog.categories)) {
+           item = cat.find(x => x.id === body.catalogId);
+           if (item) break;
+         }
+         if (!item) throw new Error('Preset not found');
+         body = {
+            ...body,
+            catalogId: item.id,
+            connectionName: item.label,
+            clientId: item.clientId,
+            clientSecret: item.clientSecret || '',
+            authorizationUrl: item.authorizationUrl,
+            tokenUrl: item.tokenUrl,
+            scopes: item.scopes,
+            extraAuthorizeParams: item.extraAuthorizeParams,
+            callbackMode: item.defaultRedirectUri && item.defaultRedirectUri.includes('1455') ? 'local_1455' : 'app',
+            adapter: item.adapter,
+            family: item.family
+         };
+      }
+      
+      const origin = `${request.headers['x-forwarded-proto'] || 'http'}://${request.headers.host}`;
+      const redirectUri = `${origin}/api/ai/oauth/callback`;
+      body.redirectUri = redirectUri;
+      
+      const authUrl = startOAuthFlow(body);
+      
+      const parsed = new URL(authUrl);
+      const state = parsed.searchParams.get('state');
+      const rUri = parsed.searchParams.get('redirect_uri');
+      
+      sendJson(response, 200, { ok: true, authorizationUrl: authUrl, state, redirectUri: rUri, callbackMode: body.callbackMode });
+    } catch (e) {
+      console.error('OAuth start error:', e);
+      sendJson(response, 500, { error: e.message });
+    }
+    return;
+  }
+  
+  if (request.method === 'GET' && pathname === '/api/ai/oauth/status') {
+    const url = new URL(request.url, `http://${request.headers.host}`);
+    const state = url.searchParams.get('state');
+    const statusObj = getOAuthStatus(state);
+    sendJson(response, 200, statusObj);
+    return;
+  }
+
+  if (request.method === 'POST' && pathname === '/api/ai/oauth/complete-manual') {
+    try {
+      const body = await readJson(request);
+      const saved = await completeOAuthManual(body.callbackUrl);
+      sendJson(response, 200, { ok: true, id: saved.id });
+    } catch(e) {
+      sendJson(response, 400, { error: e.message });
+    }
+    return;
+  }
+
+  if (request.method === 'GET' && pathname === '/api/ai/oauth/callback') {
+    try {
+      const url = new URL(request.url, `http://${request.headers.host}`);
+      const code = url.searchParams.get('code');
+      const state = url.searchParams.get('state');
+      
+      if (!code || !state) {
+        response.writeHead(302, { Location: '/?ai_oauth=error&reason=Missing+code+or+state' });
+        response.end();
+        return;
+      }
+      
+      const origin = `${request.headers['x-forwarded-proto'] || 'http'}://${request.headers.host}`;
+      const redirectUri = `${origin}/api/ai/oauth/callback`;
+      
+      await handleOAuthCallback(code, state, redirectUri);
+      
+      response.writeHead(302, { Location: '/?ai_oauth=success' });
+      response.end();
+    } catch (e) {
+      console.error('OAuth callback error:', e);
+      response.writeHead(302, { Location: `/?ai_oauth=error&reason=${encodeURIComponent(e.message)}` });
+      response.end();
+    }
+    return;
+  }
+
+  if (request.method === 'POST' && pathname === '/api/ai/oauth/disconnect') {
+    try {
+      const body = await readJson(request);
+      if (body.providerId) {
+         await deleteProvider(body.providerId);
+      }
+      sendJson(response, 200, { ok: true });
+    } catch(e) {
+      sendJson(response, 500, { error: e.message });
+    }
+    return;
+  }
+
+  if (request.method === 'GET' && pathname === '/api/ai/catalog') {
+    try {
+      const catalog = await getProviderCatalog();
+      sendJson(response, 200, catalog);
+    } catch (e) {
+      console.error('[ai-provider] load catalog failed', e);
+      sendJson(response, 500, { error: 'Failed to load catalog', details: e.message });
+    }
+    return;
+  }
+
   if (request.method === 'GET' && pathname === '/api/ai/providers') {
     const data = await getMaskedProviders();
     sendJson(response, 200, data);
@@ -1077,19 +1195,32 @@ async function api(request, response, pathname) {
   }
 
   if (request.method === 'POST' && pathname === '/api/ai/providers') {
-    const body = await parseJsonBody(request);
+    const body = await readJson(request);
     const saved = await addOrUpdateProvider(body);
     sendJson(response, 200, saved);
     return;
   }
 
   if (request.method === 'POST' && pathname === '/api/ai/providers/default') {
-    const body = await parseJsonBody(request);
+    const body = await readJson(request);
     if (body.providerId) {
       await setDefaultProvider(body.providerId);
       sendJson(response, 200, { success: true });
     } else {
       sendJson(response, 400, { error: 'Missing providerId' });
+    }
+    return;
+  }
+
+  if (request.method === 'POST' && pathname.startsWith('/api/ai/providers/') && pathname.endsWith('/model')) {
+    try {
+      const parts = pathname.split('/');
+      const id = parts[parts.length - 2];
+      const { defaultModel, baseUrl } = await readJson(request);
+      const saved = await addOrUpdateProvider({ id, defaultModel, baseUrl });
+      sendJson(response, 200, { ok: true, id: saved.id });
+    } catch(e) {
+      sendJson(response, 500, { error: e.message });
     }
     return;
   }
@@ -1101,16 +1232,8 @@ async function api(request, response, pathname) {
     return;
   }
 
-  function buildAuthHeaders(providerLike) {
-    if (providerLike.authMode === 'no_auth') return {};
-    if (providerLike.authMode === 'oauth') {
-      return { Authorization: `Bearer ${providerLike.oauthToken || ''}` };
-    }
-    return { Authorization: `Bearer ${providerLike.apiKey || ''}` };
-  }
-
   if (request.method === 'POST' && pathname === '/api/ai/test') {
-    const body = await parseJsonBody(request);
+    const body = await readJson(request);
     let targetProvider = body;
     
     if (body.providerId) {
@@ -1127,127 +1250,49 @@ async function api(request, response, pathname) {
       sendJson(response, 400, { error: 'Base URL không được để trống.' });
       return;
     }
-    if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+    if (baseUrl.endsWith('/')) targetProvider.baseUrl = baseUrl.slice(0, -1);
     
-    const abort = new AbortController();
-    const timeout = setTimeout(() => abort.abort(), 15000);
+    const adapterName = targetProvider.adapter || 'openai-compatible';
+    const adapter = adapters[adapterName];
+    if (!adapter) {
+      sendJson(response, 400, { error: 'Unsupported adapter: ' + adapterName });
+      return;
+    }
     
     try {
-      const res = await fetch(`${baseUrl}/models`, {
-        headers: {
-          ...buildAuthHeaders(targetProvider),
-          'Content-Type': 'application/json'
-        },
-        signal: abort.signal
-      });
-      clearTimeout(timeout);
-      
-      if (res.status === 401 || res.status === 403) {
-        if (body.providerId) await addOrUpdateProvider({ id: targetProvider.id, lastTestStatus: 'error', lastTestedAt: new Date().toISOString() });
-        sendJson(response, 401, { error: 'API key sai hoặc provider từ chối (401/403).' });
-        return;
-      }
-      if (res.status === 404) {
-        if (body.providerId) await addOrUpdateProvider({ id: targetProvider.id, lastTestStatus: 'error', lastTestedAt: new Date().toISOString() });
-        sendJson(response, 404, { error: 'Base URL có vẻ sai. Với 9Router hãy dùng http://127.0.0.1:20128/v1' });
-        return;
-      }
-      if (!res.ok) {
-        if (body.providerId) await addOrUpdateProvider({ id: targetProvider.id, lastTestStatus: 'error', lastTestedAt: new Date().toISOString() });
-        sendJson(response, res.status, { error: `Lỗi kết nối HTTP ${res.status}: ${res.statusText}` });
-        return;
-      }
-      
-      const data = await res.json();
-      if (!data || !data.data || data.data.length === 0) {
-        if (body.providerId) await addOrUpdateProvider({ id: targetProvider.id, lastTestStatus: 'error', lastTestedAt: new Date().toISOString() });
-        sendJson(response, 200, { models: [], error: 'Kết nối được nhưng chưa thấy model. Hãy kiểm tra provider.' });
-        return;
-      }
-      
+      const result = await adapter.testModels(targetProvider);
       if (body.providerId) await addOrUpdateProvider({ id: targetProvider.id, lastTestStatus: 'connected', lastTestedAt: new Date().toISOString() });
-      sendJson(response, 200, { models: data.data.map(m => m.id) });
+      sendJson(response, 200, result);
     } catch (error) {
-      clearTimeout(timeout);
       if (body.providerId) await addOrUpdateProvider({ id: targetProvider.id, lastTestStatus: 'error', lastTestedAt: new Date().toISOString() });
-      if (error.name === 'AbortError') {
-        sendJson(response, 504, { error: 'Kết nối quá lâu (Timeout 15s). Kiểm tra mạng hoặc local server.' });
-      } else if (error.message.includes('ECONNREFUSED') || error.message.includes('fetch failed')) {
-        sendJson(response, 502, { error: 'Không kết nối được, hãy kiểm tra 9Router/local server đã mở chưa.' });
-      } else if (error instanceof SyntaxError) {
-        sendJson(response, 500, { error: 'Provider trả về phản hồi không hợp lệ (Không phải JSON).' });
-      } else {
-        sendJson(response, 500, { error: `Lỗi kỹ thuật: ${error.message}` });
-      }
+      sendJson(response, 500, { error: error.message || 'Unknown error' });
     }
     return;
   }
 
   if (request.method === 'POST' && pathname === '/api/ai/generate') {
-    const body = await parseJsonBody(request);
+    const body = await readJson(request);
     const provider = await getProviderById(body.providerId);
     if (!provider) {
       sendJson(response, 404, { error: 'Không tìm thấy cấu hình Provider này.' });
       return;
     }
     
-    let baseUrl = provider.baseUrl;
-    if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+    let baseUrl = String(provider.baseUrl || '').trim();
+    if (baseUrl.endsWith('/')) provider.baseUrl = baseUrl.slice(0, -1);
     
-    const abort = new AbortController();
-    const timeout = setTimeout(() => abort.abort(), 60000);
+    const adapterName = provider.adapter || 'openai-compatible';
+    const adapter = adapters[adapterName];
+    if (!adapter) {
+      sendJson(response, 400, { error: 'Unsupported adapter: ' + adapterName });
+      return;
+    }
     
     try {
-      const messages = [
-        { role: 'system', content: 'You improve image generation prompts. Return only the improved prompt.' },
-        { role: 'user', content: String(body.input) }
-      ];
-      
-      const res = await fetch(`${baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          ...buildAuthHeaders(provider),
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: body.model || provider.defaultModel,
-          messages,
-          temperature: body.options?.temperature || 0.7,
-          max_tokens: body.options?.max_tokens || 500
-        }),
-        signal: abort.signal
-      });
-      clearTimeout(timeout);
-      
-      if (!res.ok) {
-        let errStr = res.statusText;
-        try {
-          const errBody = await res.json();
-          if (errBody.error && errBody.error.message) errStr = errBody.error.message;
-        } catch(e) {}
-        // DO NOT update lastTestStatus on generation failure, per user requirement
-        sendJson(response, res.status, { error: `AI Error (${res.status}): ${errStr}` });
-        return;
-      }
-      
-      const data = await res.json();
-      let text = '';
-      if (data.choices && data.choices[0]) {
-        text = data.choices[0].message?.content || data.choices[0].text || '';
-      }
-      if (!text) {
-        sendJson(response, 500, { error: 'AI không trả về text.' });
-        return;
-      }
-      
-      sendJson(response, 200, { result: text.trim() });
+      const result = await adapter.generate(provider, body);
+      sendJson(response, 200, { result: result.text, usage: result.usage });
     } catch (error) {
-      clearTimeout(timeout);
-      if (error.name === 'AbortError') {
-        sendJson(response, 504, { error: 'AI phản hồi quá lâu (Timeout 60s).' });
-      } else {
-        sendJson(response, 500, { error: `Lỗi kết nối AI: ${error.message}` });
-      }
+      sendJson(response, 500, { error: error.message || 'Unknown error' });
     }
     return;
   }

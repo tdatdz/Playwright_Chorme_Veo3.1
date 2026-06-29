@@ -33,6 +33,11 @@ export async function saveProviders(data) {
   await fs.writeFile(PROVIDERS_FILE, JSON.stringify(data, null, 2), 'utf8');
 }
 
+function maskOAuthToken(token) {
+  if (!token) return null;
+  return 'oauth-****';
+}
+
 function maskApiKey(key) {
   if (!key) return null;
   if (key.length <= 4) return '****';
@@ -47,15 +52,18 @@ export async function getMaskedProviders() {
   return {
     providers: data.providers.map(p => ({
       id: p.id,
+      catalogId: p.catalogId || null,
       category: p.category || 'api',
+      family: p.family || 'custom',
+      adapter: p.adapter || 'openai-compatible',
       name: p.name,
-      type: p.type || 'openai-compatible',
       baseUrl: p.baseUrl,
       authMode: p.authMode || 'api_key',
+      authHeaderStyle: p.authHeaderStyle || 'bearer',
       apiKeyMasked: maskApiKey(p.apiKey),
-      oauthMasked: maskApiKey(p.oauthToken),
+      tokenMasked: maskOAuthToken(p.oauthToken),
       defaultModel: p.defaultModel,
-      lastTestStatus: p.lastTestStatus || 'untested',
+      lastTestStatus: p.lastTestStatus || 'not_tested',
       lastTestedAt: p.lastTestedAt || null,
       createdAt: p.createdAt,
       updatedAt: p.updatedAt
@@ -81,12 +89,21 @@ export async function addOrUpdateProvider(provider) {
 
     data.providers[existingIndex] = {
       ...old,
+      catalogId: provider.catalogId || old.catalogId || null,
       category: provider.category || old.category || 'api',
+      family: provider.family || old.family || 'custom',
+      adapter: provider.adapter || old.adapter || 'openai-compatible',
       name: provider.name || old.name,
       baseUrl: provider.baseUrl || old.baseUrl,
       authMode: provider.authMode || old.authMode,
+      authHeaderStyle: provider.authHeaderStyle || old.authHeaderStyle || 'bearer',
       apiKey: newApiKey,
       oauthToken: newOauth,
+      clientId: provider.clientId || old.clientId,
+      clientSecret: provider.clientSecret || old.clientSecret,
+      refreshToken: provider.refreshToken || old.refreshToken,
+      idToken: provider.idToken || old.idToken,
+      expiresAt: provider.expiresAt || old.expiresAt,
       defaultModel: provider.defaultModel || old.defaultModel,
       lastTestStatus: provider.lastTestStatus || old.lastTestStatus,
       lastTestedAt: provider.lastTestedAt || old.lastTestedAt,
@@ -95,10 +112,19 @@ export async function addOrUpdateProvider(provider) {
   } else {
     data.providers.push({
       ...provider,
-      id: provider.id || `provider_${Date.now()}`,
+      id: provider.id || `provider_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      catalogId: provider.catalogId || null,
       category: provider.category || 'api',
+      family: provider.family || 'custom',
+      adapter: provider.adapter || 'openai-compatible',
       authMode: provider.authMode || 'api_key',
-      lastTestStatus: provider.lastTestStatus || 'untested',
+      authHeaderStyle: provider.authHeaderStyle || 'bearer',
+      clientId: provider.clientId || null,
+      clientSecret: provider.clientSecret || null,
+      refreshToken: provider.refreshToken || null,
+      idToken: provider.idToken || null,
+      expiresAt: provider.expiresAt || null,
+      lastTestStatus: provider.lastTestStatus || 'not_tested',
       lastTestedAt: provider.lastTestedAt || null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -117,7 +143,7 @@ export async function deleteProvider(id) {
   const data = await loadProviders();
   data.providers = data.providers.filter(p => p.id !== id);
   if (data.defaultProviderId === id) {
-    data.defaultProviderId = data.providers.length > 0 ? data.providers[0].id : null;
+    data.defaultProviderId = null; // Do not auto-select according to new rules
   }
   await saveProviders(data);
 }
